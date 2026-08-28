@@ -1,4 +1,4 @@
-name: Build Flet APK
+Name: Build Flet APK
 
 on:
   push:
@@ -60,7 +60,7 @@ jobs:
         echo "PINECONE_INDEX_HOST = \"$PINECONE_INDEX_HOST\"" >> config.py
   
         rm -rf build/ dist/ .venv/ venv/ __pycache__/
-        rm -f background.js content.js manifest.json popup.html popup.js RUBY_03.png
+        rm -f RUBY_03.png
         python3 -m compileall . || exit 1
         flet build apk --python-version 3.12 --yes
         
@@ -71,4 +71,3 @@ jobs:
         path: |
           build/**/*.apk
           **/app-release.apk
-          
