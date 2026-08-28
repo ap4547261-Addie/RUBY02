@@ -1,0 +1,5 @@
+Flet>=0.23.0
+requests
+python-dotenv
+pinecone-client
+websockets
