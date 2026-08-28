@@ -1,4 +1,4 @@
-Name: Build Flet APK
+name: Build Flet APK
 
 on:
   push:
