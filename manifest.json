@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Ruby Browser Bridge",
+  "version": "1.1",
+  "description": "Streams active social media pages and search queries directly to Ruby's engine core via WebSocket.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.instagram.com/*",
+        "*://*.youtube.com/*",
+        "*://*.twitter.com/*",
+        "*://*.x.com/*",
+        "*://*.reddit.com/*",
+        "*://*.linkedin.com/*",
+        "*://*.facebook.com/*"
+      ],
+      "js": ["content.js"]
+    }
+  ]
+}
