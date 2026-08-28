@@ -1,0 +1,74 @@
+name: Build Flet APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Free Up Disk Space
+      run: |
+        echo "=== Freeing up disk space ==="
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        df -h
+
+    - name: Install Linux Desktop Dependencies (Fixes Doctor Check)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtk-3-dev mesa-utils
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install flet-cli
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.3'
+        cache: true
+
+    - name: Accept Android Licenses
+      run: |
+        yes | flutter doctor --android-licenses || true
+    
+    - name: Generate Config and Build APK
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+        PINECONE_INDEX_HOST: ${{ secrets.PINECONE_INDEX_HOST }}
+        FLET_SUPPRESS_PROMPTS: "true"
+      run: |
+        echo "GEMINI_API_KEY = \"$GEMINI_API_KEY\"" > config.py
+        echo "PINECONE_API_KEY = \"$PINECONE_API_KEY\"" >> config.py
+        echo "PINECONE_INDEX_HOST = \"$PINECONE_INDEX_HOST\"" >> config.py
+  
+        rm -rf build/ dist/ .venv/ venv/ __pycache__/
+        rm -f background.js content.js manifest.json popup.html popup.js RUBY_03.png
+        python3 -m compileall . || exit 1
+        flet build apk --python-version 3.12 --yes
+        
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ruby-apk
+        path: |
+          build/**/*.apk
+          **/app-release.apk
+          
