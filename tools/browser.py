@@ -89,5 +89,6 @@ class BrowserTool:
                 browser.close()
                 return result[:3000]
             except Exception as e:
-                return f"Social browser automation error: {str(e)}"
-                
+                err_message = str(e)
+                return f"Social browser automation error: {err_message}"
+            
