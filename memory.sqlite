@@ -1,0 +1,119 @@
+import os
+import flet as ft
+from datetime import datetime
+import config
+from engine.router import BrainRouter
+from memory.sqlite import init_db, save_message, get_recent_messages, save_fact, get_all_memories
+from personality.ruby import RUBY_PROMPT
+
+# Initialize the Brain Router
+router = BrainRouter(cloud_api_key=getattr(config, "GEMINI_API_KEY", None))
+
+ui_page_ref = None
+chat_list_ref = None
+
+def add_message(sender, text, is_user=False):
+    if chat_list_ref and ui_page_ref:
+        bubble = ft.Container(  
+            content=ft.Column([  
+                ft.Text(sender, size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_400 if is_user else ft.Colors.CYAN_400),  
+                ft.Text(text, size=14, color=ft.Colors.WHITE)  
+            ], spacing=2),  
+            bgcolor="#1E1E24" if not is_user else "#2A2A36",  
+            padding=12,  
+            border_radius=8,  
+        )  
+        chat_list_ref.controls.append(bubble)  
+        ui_page_ref.update()
+
+def main_app_ui(page: ft.Page):
+    global ui_page_ref, chat_list_ref
+    ui_page_ref = page
+    
+    page.title = "Ruby"
+    page.theme_mode = ft.ThemeMode.DARK
+    page.bgcolor = "#101014"
+    page.padding = 16
+    page.vertical_alignment = ft.MainAxisAlignment.END
+
+    chat_list = ft.ListView(expand=True, spacing=12, auto_scroll=True)
+    chat_list_ref = chat_list
+
+    # Load existing history from SQLite database on startup
+    past_messages = get_recent_messages(limit=20)
+    for msg in past_messages:
+        is_usr = (msg["role"] == "user")
+        sender = "Addie" if is_usr else "Ruby"
+        add_message(sender, msg["content"], is_user=is_usr)
+
+    user_input = ft.TextField(  
+        hint_text="Say something to Ruby...",  
+        border_color="#3A3A46",  
+        focused_border_color=ft.Colors.CYAN_400,  
+        bgcolor="#18181C",  
+        color=ft.Colors.WHITE,  
+        expand=True,  
+        border_radius=8,  
+    )  
+
+    def send_click(e):  
+        text = user_input.value.strip()  
+        if not text:  
+            return  
+
+        add_message("Addie", text, is_user=True)
+        save_message("user", text)
+        
+        user_input.value = ""  
+        user_input.focus()  
+        page.update()  
+
+        try:  
+            # Fetch long-term memories to inject into system prompt context
+            all_memories = get_all_memories()
+            memories_str = ", ".join(all_memories) if all_memories else "No local memories yet."
+            system_payload = f"{RUBY_PROMPT}\n\n[Current Retrieved Memories: {memories_str}]"
+
+            # Build messages payload for the router
+            messages_payload = [{"role": "system", "content": system_payload}]
+            messages_payload.extend(get_recent_messages(limit=15))
+
+            routed_result = router.route_request(messages_payload, use_cloud_preferred=True)
+            reply = routed_result["response"]
+
+            # Handle memory saving triggers from Ruby's output
+            if "[SAVE_MEMORY:" in reply:  
+                parts = reply.split("[SAVE_MEMORY:")  
+                clean_reply = parts[0].strip()  
+                memory_fact = parts[1].replace("]", "").strip()  
+                save_fact(memory_fact)  
+                reply = f"{clean_reply}\n\n*(Memory Saved: {memory_fact})*"  
+
+            save_message("assistant", reply)
+            add_message("Ruby", reply)  
+        except Exception as ex:  
+            add_message("Ruby", f"Ugh, connection dropped... ({str(ex)})")  
+
+    send_btn = ft.IconButton(  
+        icon=ft.Icons.SEND_ROUNDED,  
+        icon_color=ft.Colors.CYAN_400,  
+        on_click=send_click,  
+    )  
+
+    input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)  
+
+    page.add(  
+        ft.Column([  
+            ft.Container(  
+                content=ft.Text("RUBY // GENIUS HUMAN CORE", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),  
+                alignment=ft.alignment.Alignment(0, 0),  
+                padding=5  
+            ),  
+            chat_list,  
+            input_row  
+        ], expand=True)  
+    )  
+    page.update()
+
+if __name__ == "__main__":
+    ft.app(target=main_app_ui)
