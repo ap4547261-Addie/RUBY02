@@ -1,0 +1,48 @@
+// popup.js - Handles interaction inside the extension popup UI and talks to background/WebSocket
+document.addEventListener("DOMContentLoaded", () => {
+    const chatContainer = document.getElementById("chat-container");
+    const userInput = document.getElementById("user-input");
+    const sendBtn = document.getElementById("send-btn");
+
+    function appendMessage(sender, text, isUser = false) {
+        const msgDiv = document.createElement("div");
+        msgDiv.style.margin = "6px 0";
+        msgDiv.style.color = isUser ? "#ffeb3b" : "#00bcd4";
+        msgDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+        chatContainer.appendChild(msgDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function handleSend() {
+        const text = userInput.value.trim();
+        if (!text) return;
+
+        appendMessage("Addie", text, true);
+        userInput.value = "";
+
+        // Query active tab and pass message/content back to background or directly trigger action
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const activeTab = tabs[0];
+            
+            // Send action to background worker
+            chrome.runtime.sendMessage({
+                action: "autoSearch",
+                query: text,
+                url: activeTab ? activeTab.url : ""
+            }, (response) => {
+                if (response && response.success) {
+                    appendMessage("Ruby", `Processed page context: ${response.text.slice(0, 150)}...`);
+                } else {
+                    appendMessage("Ruby", "Got your message, processing locally.");
+                }
+            });
+        });
+    }
+
+    sendBtn.addEventListener("click", handleSend);
+    userInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+            handleSend();
+        }
+    });
+});
