@@ -63,8 +63,8 @@ jobs:
         rm -f RUBY_03.png
         python3 -m compileall . || exit 1
         
-        # Build exclusively for 64-bit Android to output a single lightweight file (~50MB)
-        flet build apk --python-version 3.12 --target-platform android-arm64 --yes
+        # Fixed: Flet CLI uses --arch instead of --target-platform for CPU architectures
+        flet build apk --python-version 3.12 --arch arm64-v8a --yes
         
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
