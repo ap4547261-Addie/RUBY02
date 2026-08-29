@@ -1,3 +1,4 @@
+# engine/brain.py
 import os
 from google import genai
 from google.genai import types
@@ -8,10 +9,22 @@ class RubyBrainCore:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.client = genai.Client(api_key=self.api_key)
 
+    def generate_text(self, messages_payload):
+        """Handles core text generation using the Gemini 3.6 Flash model."""
+        try:
+            # Convert simple dictionary format to contents structure if needed
+            response = self.client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=messages_payload
+            )
+            return response.text
+        except Exception as e:
+            print(f"Text Gen Error: {e}")
+            raise e
+
     def generate_image(self, prompt_text: str) -> str:
         """Handles image generation using the correct Imagen client endpoint with raw phone-camera styling."""
         try:
-            # Enforce raw smartphone aesthetics to strip the AI look
             phone_camera_prompt = (
                 "Raw unfiltered smartphone photo, taken on a phone front camera, "
                 "natural skin texture with visible pores, casual everyday lighting, "
@@ -46,9 +59,8 @@ class RubyBrainCore:
                 "Raw smartphone video recording, handheld phone camera view, "
                 "slight natural hand shake, minor motion jitter, everyday indoor lighting, "
                 "unfiltered mobile camera quality, realistic amateur framing, "
-                f"no cinematic studio lighting, {phone_video_prompt}"
+                f"no cinematic studio lighting, {prompt_text}"
             )
-            # Add your actual video model API generation call here using phone_video_prompt
             print(f"Generating video with prompt: {phone_video_prompt}")
             return None
         except Exception as e:
