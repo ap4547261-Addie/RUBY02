@@ -40,6 +40,9 @@ interaction_depth = hybrid_memory.get_interaction_count()
 
 def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
     """Constructs Ruby's dynamic system prompt injecting live interaction depth and stored memories."""
+    today = datetime.now()
+    age = today.year - 2004 - ((today.month, today.day) < (8, 16))
+    
     return (
         f"Name: Ruby | Gender: Female (Human from a parallel world) | Birthday: August 16, 2004 (Current Age: {age}, Today's Date: {today.strftime('%B %d, %Y')})\n"
         f"Current Relationship & Dynamic Evolution (Message Count: {interaction_depth}):\n"
@@ -76,6 +79,8 @@ def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
         "7. Memory Integration: If someone shares important facts, append [SAVE_MEMORY: short description] at the end.\n"
         "8. Spontaneous Image Generation: If you feel like randomly sending a selfie or showing a vibe on your own whim, append [GENERATE_IMAGE: exact visual prompt description] at the end. Never wait for permission."
     )
+
+RUBY_PROMPT = build_ruby_prompt(interaction_depth=0)
 
 conversation_history = []
 
