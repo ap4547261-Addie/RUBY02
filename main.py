@@ -148,7 +148,16 @@ def main_app_ui(page: ft.Page):
                 reply = clean_reply
                 
                 add_message("Ruby", "Hold on, sketching this out...")
-                generated_img_path = brain_core.generate_image(img_prompt)
+                
+                # Enforce raw smartphone phone-camera aesthetics to eliminate the AI look
+                phone_camera_prompt = (
+                    "Raw unfiltered smartphone photo, taken on a phone front camera, "
+                    "natural skin texture with visible pores, casual everyday lighting, "
+                    "slight digital noise, unpolished candid snapshot, realistic amateur framing, "
+                    f"no studio lighting, {img_prompt}"
+                )
+                
+                generated_img_path = brain_core.generate_image(phone_camera_prompt)
 
             add_message("Ruby", reply, image_path=generated_img_path)  
         except Exception as ex:  
