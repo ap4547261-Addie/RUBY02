@@ -9,14 +9,22 @@ class RubyBrainCore:
         self.client = genai.Client(api_key=self.api_key)
 
     def generate_image(self, prompt_text: str) -> str:
-        """Handles image generation using the correct Imagen client endpoint."""
+        """Handles image generation using the correct Imagen client endpoint with raw phone-camera styling."""
         try:
+            # Enforce raw smartphone aesthetics to strip the AI look
+            phone_camera_prompt = (
+                "Raw unfiltered smartphone photo, taken on a phone front camera, "
+                "natural skin texture with visible pores, casual everyday lighting, "
+                "slight digital noise, unpolished candid snapshot, realistic amateur framing, "
+                f"no studio lighting, {prompt_text}"
+            )
+            
             result = self.client.models.generate_images(
                 model="imagen-3.0-generate-002",
-                prompt=prompt_text,
+                prompt=phone_camera_prompt,
                 config=types.GenerateImagesConfig(
                     number_of_images=1,
-                    aspect_ratio="1:1",
+                    aspect_ratio="9:16",  # Optimized for vertical mobile screens
                     output_mime_type="image/png"
                 )
             )
@@ -29,4 +37,20 @@ class RubyBrainCore:
                 return file_name
         except Exception as e:
             print(f"Image Gen Error: {e}")
+        return None
+
+    def generate_video(self, prompt_text: str) -> str:
+        """Handles video generation with shaky, unfiltered smartphone camera framing."""
+        try:
+            phone_video_prompt = (
+                "Raw smartphone video recording, handheld phone camera view, "
+                "slight natural hand shake, minor motion jitter, everyday indoor lighting, "
+                "unfiltered mobile camera quality, realistic amateur framing, "
+                f"no cinematic studio lighting, {phone_video_prompt}"
+            )
+            # Add your actual video model API generation call here using phone_video_prompt
+            print(f"Generating video with prompt: {phone_video_prompt}")
+            return None
+        except Exception as e:
+            print(f"Video Gen Error: {e}")
         return None
