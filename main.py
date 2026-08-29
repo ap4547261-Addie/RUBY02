@@ -168,7 +168,6 @@ def main_app_ui(page: ft.Page):
                 
                 add_message("Ruby", "Hold on, sketching this out...")
                 
-                # Enforce raw smartphone phone-camera aesthetics to eliminate the AI look
                 phone_camera_prompt = (
                     "Raw unfiltered smartphone photo, taken on a phone front camera, "
                     "natural skin texture with visible pores, casual everyday lighting, "
