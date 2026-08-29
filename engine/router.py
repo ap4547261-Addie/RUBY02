@@ -1,3 +1,4 @@
+# engine/router.py
 import os
 import urllib.request
 import json
@@ -7,7 +8,8 @@ class BrainRouter:
     def __init__(self, cloud_api_key=None, local_model_path=None):
         self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
         self.local_model_path = local_model_path
-        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        # Updated to the correct Gemini 3.6 Flash endpoint
+        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
 
     def _is_connected(self):
         try:
@@ -31,6 +33,7 @@ class BrainRouter:
     def _call_cloud(self, messages, personality=None):
         gemini_contents = []
         for msg in messages:
+            # Handle system roles safely or map them appropriately for the endpoint
             role = "user" if msg["role"] == "user" else "model"
             gemini_contents.append({
                 "role": role,
