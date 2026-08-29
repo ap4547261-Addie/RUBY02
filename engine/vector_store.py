@@ -6,7 +6,10 @@ class HybridMemorySystem:
     def __init__(self, sqlite_path="ruby_memory.db", pinecone_api_key=None, index_host=None):
         self.sqlite_path = sqlite_path
         self.pinecone_api_key = pinecone_api_key or os.getenv("PINECONE_API_KEY")
-        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        
+        # Fallback to an empty string or local config if environment variable is missing on mobile
+        api_key = os.getenv("GEMINI_API_KEY") or "YOUR_FALLBACK_API_KEY_HERE"
+        self.client = genai.Client(api_key=api_key)
         
         self._init_sqlite()
 
