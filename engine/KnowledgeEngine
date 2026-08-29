@@ -1,0 +1,13 @@
+class KnowledgeEngine:
+    def search(self, query: str):
+        # Optional: Hook up Google Search grounding here if needed
+        return None
+
+class ToolEngine:
+    def __init__(self):
+        pass
+    
+    def execute_tool(self, tool_name, kwargs):
+        # Handle custom action execution
+        pass
+
