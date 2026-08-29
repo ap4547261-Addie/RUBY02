@@ -8,7 +8,7 @@ class BrainRouter:
     def __init__(self, cloud_api_key=None, local_model_path=None):
         self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
         self.local_model_path = local_model_path
-        # Updated to the correct Gemini 3.6 Flash endpoint
+        # Updated to the correct Gemini 3.7 Flash endpoint
         self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
 
     def _is_connected(self):
