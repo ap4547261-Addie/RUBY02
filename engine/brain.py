@@ -14,7 +14,7 @@ class RubyBrainCore:
         try:
             # Convert simple dictionary format to contents structure if needed
             response = self.client.models.generate_content(
-                model="gemini-3.6-flash",
+                model="gemini-3.7-flash",
                 contents=messages_payload
             )
             return response.text
