@@ -3,7 +3,6 @@ import urllib.request
 import urllib.parse
 from html.parser import HTMLParser
 
-# Safely try importing Playwright so it doesn't crash the Android build when missing
 try:
     from playwright.sync_api import sync_playwright
     PLAYWRIGHT_AVAILABLE = True
@@ -26,7 +25,6 @@ class HTMLTextExtractor(HTMLParser):
 
 class BrowserTool:
     def __init__(self, user_data_dir=None):
-        # Persistent profile path for desktop sessions
         self.user_data_dir = user_data_dir or os.path.expanduser("~/.ruby_browser_profile")
 
     def fetch_page_content(self, url: str, max_chars: int = 3000) -> str:
@@ -65,10 +63,6 @@ class BrowserTool:
             return f"Search failed: {str(e)}"
 
     def browse_social(self, url: str, action_type: str = "read", input_text: str = None) -> str:
-        """
-        Headless browser automation. Uses Playwright if installed, 
-        otherwise gracefully falls back to a standard mobile HTTP fetch.
-        """
         if not PLAYWRIGHT_AVAILABLE:
             return self.fetch_page_content(url)
 
@@ -97,3 +91,7 @@ class BrowserTool:
             except Exception as e:
                 err_message = str(e)
                 return f"Social browser automation error: {err_message}"
+
+class BrowserToolServer(BrowserTool):
+    """Compatibility alias to prevent import errors across main scripts."""
+    pass
