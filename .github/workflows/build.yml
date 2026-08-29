@@ -63,6 +63,10 @@ jobs:
         rm -f RUBY_03.png
         python3 -m compileall . || exit 1
         
+        # Inject the keys from config.py into environment variables right before building
+        export GEMINI_API_KEY="$GEMINI_API_KEY"
+        export PINECONE_API_KEY="$PINECONE_API_KEY"
+        
         flet build apk --python-version 3.12 --arch arm64-v8a --yes
         
     - name: Upload APK Artifact
