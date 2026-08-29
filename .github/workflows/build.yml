@@ -63,7 +63,6 @@ jobs:
         rm -f RUBY_03.png
         python3 -m compileall . || exit 1
         
-        # Fixed: Flet CLI uses --arch instead of --target-platform for CPU architectures
         flet build apk --python-version 3.12 --arch arm64-v8a --yes
         
     - name: Upload APK Artifact
@@ -71,4 +70,5 @@ jobs:
       with:
         name: ruby-apk
         path: |
-          build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          build/**/*.apk
+          **/app-*.apk
