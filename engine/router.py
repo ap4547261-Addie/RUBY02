@@ -7,7 +7,8 @@ class BrainRouter:
     def __init__(self, cloud_api_key=None, local_model_path=None):
         self.cloud_api_key = cloud_api_key or os.getenv("GROQ_API_KEY")
         self.local_model_path = local_model_path
-        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
+        # Updated to active production endpoint to prevent 404/connection drops
+        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
     def _is_connected(self):
         """Quick check to see if internet is available."""
@@ -30,11 +31,10 @@ class BrainRouter:
                 print(f"Cloud model failed ({e}).")
                 return {"source": "local", "response": f"Cloud Error: {str(e)}"}
 
-        # Fallback to local model execution if key is missing
         return {"source": "local", "response": self._call_local(messages)}
 
     def _call_cloud(self, messages):
-        """Handles communication with the cloud LLM API (Google Gemini 3.6 Flash)."""
+        """Handles communication with the cloud LLM API with an extended 60s timeout."""
         gemini_contents = []
         for msg in messages:
             role = "user" if msg["role"] == "user" else "model"
@@ -44,14 +44,8 @@ class BrainRouter:
             })
 
         url = f"{self.cloud_url}?key={self.cloud_api_key}"
-        
-        headers = {
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "contents": gemini_contents
-        }
+        headers = {"Content-Type": "application/json"}
+        payload = {"contents": gemini_contents}
         
         try:
             req = urllib.request.Request(
@@ -61,13 +55,17 @@ class BrainRouter:
                 method="POST"
             )
             
-            with urllib.request.urlopen(req, timeout=25) as response:
+            # Extended timeout to 60 seconds to prevent read operation drops
+            with urllib.request.urlopen(req, timeout=60) as response:
                 result = json.loads(response.read().decode("utf-8"))
                 return result["candidates"][0]["content"]["parts"][0]["text"]
                 
+        except socket.timeout:
+            print("GEMINI FLASH API TIMED OUT.")
+            raise Exception("Cloud request timed out. The server took too long to respond.")
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8")
-            print(f"GEMINI 3.6 FLASH API FAILED WITH CODE {e.code}: {error_body}")
+            print(f"GEMINI FLASH API FAILED WITH CODE {e.code}: {error_body}")
             raise e
 
     def _call_local(self, messages):
@@ -75,5 +73,5 @@ class BrainRouter:
         if self.local_model_path:
             pass
             
-        return "Error: API Key missing or cloud request failed. Check your GitHub repository secrets!"
+        return "Error: API Key missing or cloud request failed. Check your configuration secrets!"
         
