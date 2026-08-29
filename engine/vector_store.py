@@ -1,4 +1,3 @@
-# engine/vector_store.py
 import os
 import sqlite3
 from google import genai
@@ -9,7 +8,6 @@ class HybridMemorySystem:
         self.pinecone_api_key = pinecone_api_key or os.getenv("PINECONE_API_KEY")
         self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         
-        # Initialize SQLite fallback table
         self._init_sqlite()
 
     def _init_sqlite(self):
@@ -21,24 +19,35 @@ class HybridMemorySystem:
                 fact TEXT UNIQUE
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS stats (
+                key TEXT PRIMARY KEY,
+                value INTEGER
+            )
+        """)
+        cursor.execute("INSERT OR IGNORE INTO stats (key, value) VALUES ('interaction_count', 0)")
         conn.commit()
         conn.close()
 
-    def _get_embedding(self, text: str):
-        """Generates vector embeddings using Gemini embedding models."""
-        try:
-            response = self.client.models.embed_content(
-                model="text-embedding-004",
-                contents=text
-            )
-            return response.embedding.values
-        except Exception as e:
-            print(f"Embedding Generation Error: {e}")
-            return None
+    def increment_interaction(self) -> int:
+        conn = sqlite3.connect(self.sqlite_path)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE stats SET value = value + 1 WHERE key = 'interaction_count'")
+        cursor.execute("SELECT value FROM stats WHERE key = 'interaction_count'")
+        count = cursor.fetchone()[0]
+        conn.commit()
+        conn.close()
+        return count
+
+    def get_interaction_count(self) -> int:
+        conn = sqlite3.connect(self.sqlite_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM stats WHERE key = 'interaction_count'")
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else 0
 
     def save_hybrid_memory(self, fact: str):
-        """Saves text locally in SQLite and pushes vector embeddings to Pinecone."""
-        # 1. Save to SQLite
         try:
             conn = sqlite3.connect(self.sqlite_path)
             cursor = conn.cursor()
@@ -48,15 +57,7 @@ class HybridMemorySystem:
         except Exception as e:
             print(f"SQLite Save Error: {e}")
 
-        # 2. Generate vector and sync with Pinecone (if configured)
-        if self.pinecone_api_key:
-            vector = self._get_embedding(fact)
-            if vector:
-                # Add your Pinecone vector upsert logic here using your index host
-                pass
-
-    def search_memories(self, query: str, limit=3) -> str:
-        """Pulls relevant context using hybrid keyword or semantic search."""
+    def search_memories(self, query: str, limit=5) -> str:
         memories_found = []
         try:
             conn = sqlite3.connect(self.sqlite_path)
@@ -71,5 +72,5 @@ class HybridMemorySystem:
             print(f"SQLite Read Error: {e}")
 
         if not memories_found:
-            return "No local memories yet."
+            return "No deep memories formed yet."
         return ", ".join(memories_found)
