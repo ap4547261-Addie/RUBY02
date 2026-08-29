@@ -9,27 +9,24 @@ class RubyBrainCore:
         self.client = genai.Client(api_key=self.api_key)
 
     def generate_image(self, prompt_text: str) -> str:
-        """Handles image generation using a valid supported model endpoint."""
+        """Handles image generation using the correct Imagen client endpoint."""
         try:
-            response = self.client.models.generate_content(
+            result = self.client.models.generate_images(
                 model="imagen-3.0-generate-002",
-                contents=prompt_text,
-                config=types.GenerateContentConfig(
-                    response_modalities=["IMAGE"],
-                    image_config=types.ImageConfig(
-                        aspectRatio="1:1"
-                    )
+                prompt=prompt_text,
+                config=types.GenerateImagesConfig(
+                    number_of_images=1,
+                    aspect_ratio="1:1",
+                    output_mime_type="image/png"
                 )
             )
             
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, 'inline_data') and part.inline_data:
-                    image_bytes = part.inline_data.data
-                    file_name = f"ruby_gen_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                    with open(file_name, "wb") as f:
-                        f.write(image_bytes)
-                    return file_name
+            for generated_image in result.generated_images:
+                image_bytes = generated_image.image.image_bytes
+                file_name = f"ruby_gen_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                with open(file_name, "wb") as f:
+                    f.write(image_bytes)
+                return file_name
         except Exception as e:
             print(f"Image Gen Error: {e}")
         return None
-        
