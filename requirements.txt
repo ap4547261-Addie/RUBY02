@@ -1,7 +1,5 @@
 flet>=0.25.0
 google-genai
-playwright
 requests
 beautifulsoup4
 websockets
-
