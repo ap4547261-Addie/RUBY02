@@ -16,10 +16,10 @@ class BrainRouter:
         except OSError:
             return False
 
-    def route_request(self, messages, use_cloud_preferred=True):
+    def route_request(self, messages, personality=None, use_cloud_preferred=True):
         if use_cloud_preferred and self.cloud_api_key:
             try:
-                response = self._call_cloud(messages)
+                response = self._call_cloud(messages, personality)
                 if response:
                     return {"source": "cloud", "response": response}
             except Exception as e:
@@ -28,7 +28,7 @@ class BrainRouter:
 
         return {"source": "local", "response": self._call_local(messages)}
 
-    def _call_cloud(self, messages):
+    def _call_cloud(self, messages, personality=None):
         gemini_contents = []
         for msg in messages:
             role = "user" if msg["role"] == "user" else "model"
@@ -41,28 +41,24 @@ class BrainRouter:
         headers = {"Content-Type": "application/json"}
         payload = {"contents": gemini_contents}
         
-        try:
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers=headers,
-                method="POST"
-            )
-            
-            with urllib.request.urlopen(req, timeout=60) as response:
-                result = json.loads(response.read().decode("utf-8"))
-                return result["candidates"][0]["content"]["parts"][0]["text"]
-                
-        except socket.timeout:
-            print("GEMINI FLASH API TIMED OUT.")
-            raise Exception("Cloud request timed out. The server took too long to respond.")
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8")
-            print(f"GEMINI FLASH API FAILED WITH CODE {e.code}: {error_body}")
-            raise e
+        # Injects her live emotional and state prompt as a system instruction
+        if personality:
+            payload["system_instruction"] = {
+                "parts": [{"text": personality}]
+            }
+        
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST"
+        )
+        
+        with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            return result["candidates"][0]["content"]["parts"][0]["text"]
 
     def _call_local(self, messages):
         if self.local_model_path:
             pass
-        return "Error: API Key missing or cloud request failed. Check your configuration secrets!"
-        
+        return "Error: API Key missing or cloud request failed."
