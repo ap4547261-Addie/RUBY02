@@ -1,14 +1,12 @@
 [project]
 name = "ruby"
-version = "1.0.0"
-requires-python = ">=3.12,<3.13"
+version = "0.1.0"
 dependencies = [
-    "Flet>=0.23.0",
+    "flet>=0.25.0",
+    "google-genai",
+    "playwright",
     "requests",
-    "python-dotenv",
-    "pinecone-client",
+    "beautifulsoup4",
     "websockets"
 ]
-
-[tool.flet.app]
-product = "Ruby"
+requires-python = ">=3.12"
