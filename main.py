@@ -26,6 +26,26 @@ hybrid_memory = HybridMemorySystem(
 PINECONE_API_KEY = getattr(config, "PINECONE_API_KEY", "")
 PINECONE_INDEX_HOST = getattr(config, "PINECONE_INDEX_HOST", "")
 
+# Persistent Storage Setup for Chat History
+STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
+HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
+
+def load_chat_history():
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def save_chat_history():
+    try:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(conversation_history, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Failed to save history: {e}")
+
 # Dynamically calculate her current age
 today = datetime.now()
 birth_year = 2004
@@ -109,7 +129,7 @@ def add_message(sender, text, is_user=False, image_path=None):
         ui_page_ref.update()
 
 def main_app_ui(page: ft.Page):
-    global ui_page_ref, chat_list_ref
+    global ui_page_ref, chat_list_ref, conversation_history
     ui_page_ref = page
     
     page.title = "Ruby"
@@ -120,6 +140,23 @@ def main_app_ui(page: ft.Page):
 
     chat_list = ft.ListView(expand=True, spacing=12, auto_scroll=True)
     chat_list_ref = chat_list
+
+    # Load and render past messages on startup
+    conversation_history = load_chat_history()
+    for msg in conversation_history:
+        sender_name = "Addie" if msg["role"] == "user" else "Ruby"
+        is_usr = msg["role"] == "user"
+        controls_list = [  
+            ft.Text(sender_name, size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_400 if is_usr else ft.Colors.CYAN_400),  
+            ft.Text(msg["content"], size=14, color=ft.Colors.WHITE)  
+        ]
+        bubble = ft.Container(  
+            content=ft.Column(controls_list, spacing=6),  
+            bgcolor="#1E1E24" if not is_usr else "#2A2A36",  
+            padding=12,  
+            border_radius=8,  
+        )  
+        chat_list.controls.append(bubble)
 
     user_input = ft.TextField(  
         hint_text="Say something to Ruby or ask her to draw...",  
@@ -151,6 +188,9 @@ def main_app_ui(page: ft.Page):
 
             conversation_history.append({"role": "user", "content": text})
             conversation_history.append({"role": "assistant", "content": reply})
+            
+            # Persist changes to local storage
+            save_chat_history()
 
             if "[SAVE_MEMORY:" in reply:  
                 parts = reply.split("[SAVE_MEMORY:")  
