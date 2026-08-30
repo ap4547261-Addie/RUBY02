@@ -11,7 +11,7 @@ class BrainRouter:
         self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
         self.local_model_path = local_model_path
         # Ensure the path explicitly includes 'models/' before the model name
-        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
 
     def _is_connected(self):
         try:
