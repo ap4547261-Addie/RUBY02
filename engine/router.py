@@ -10,7 +10,8 @@ class BrainRouter:
     def __init__(self, cloud_api_key=None, local_model_path=None):
         self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
         self.local_model_path = local_model_path
-        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+        # Ensure the path explicitly includes 'models/' before the model name
+        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
     def _is_connected(self):
         try:
@@ -31,13 +32,20 @@ class BrainRouter:
                         return {"source": "cloud", "response": response}
                 except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
                     status_code = getattr(e, 'code', None)
+                    error_message = str(e)
+                    if hasattr(e, 'read'):
+                        try:
+                            error_message = e.read().decode('utf-8')
+                        except Exception:
+                            pass
+                    
                     if status_code in [429, 503] or isinstance(e, (socket.timeout, urllib.error.URLError)):
                         if attempt < max_retries - 1:
-                            print(f"Network glitch ({e}). Retrying in {backoff_delay}s... (Attempt {attempt + 1}/{max_retries})")
+                            print(f"Network glitch ({error_message}). Retrying in {backoff_delay}s... (Attempt {attempt + 1}/{max_retries})")
                             time.sleep(backoff_delay)
                             backoff_delay *= 2
                             continue
-                    return {"source": "local", "response": f"Cloud Error: {str(e)}"}
+                    return {"source": "local", "response": f"Cloud Error: {error_message}"}
                 except Exception as e:
                     return {"source": "local", "response": f"Cloud Error: {str(e)}"}
 
