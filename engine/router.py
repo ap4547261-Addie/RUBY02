@@ -22,25 +22,24 @@ class BrainRouter:
     def route_request(self, messages, personality=None, use_cloud_preferred=True):
         if use_cloud_preferred and self.cloud_api_key:
             max_retries = 3
-            backoff_delay = 4  # Initial wait time in seconds
+            backoff_delay = 3
             
             for attempt in range(max_retries):
                 try:
                     response = self._call_cloud(messages, personality)
                     if response:
                         return {"source": "cloud", "response": response}
-                except urllib.error.HTTPError as e:
-                    # Catch HTTP 429 Too Many Requests specifically
-                    if e.code == 429:
+                except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout) as e:
+                    status_code = getattr(e, 'code', None)
+                    # Catch 429 (Rate limit), 503 (Service unavailable), or timeouts/network drops
+                    if status_code in [429, 503] or isinstance(e, (socket.timeout, urllib.error.URLError)):
                         if attempt < max_retries - 1:
-                            print(f"Rate limited (429). Retrying in {backoff_delay}s... (Attempt {attempt + 1}/{max_retries})")
+                            print(f"Network/Server issue ({e}). Retrying in {backoff_delay}s... (Attempt {attempt + 1}/{max_retries})")
                             time.sleep(backoff_delay)
-                            backoff_delay *= 2  # Double the wait time for the next retry
+                            backoff_delay *= 2
                             continue
-                    print(f"Cloud model failed ({e}).")
                     return {"source": "local", "response": f"Cloud Error: {str(e)}"}
                 except Exception as e:
-                    print(f"Cloud model failed ({e}).")
                     return {"source": "local", "response": f"Cloud Error: {str(e)}"}
 
         return {"source": "local", "response": self._call_local(messages)}
@@ -70,7 +69,8 @@ class BrainRouter:
             method="POST"
         )
         
-        with urllib.request.urlopen(req, timeout=60) as response:
+        # 90-second timeout to prevent read operation timeout crashes on mobile data
+        with urllib.request.urlopen(req, timeout=90) as response:
             result = json.loads(response.read().decode("utf-8"))
             return result["candidates"][0]["content"]["parts"][0]["text"]
 
