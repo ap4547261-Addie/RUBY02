@@ -11,7 +11,7 @@ class BrainRouter:
         self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
         self.local_model_path = local_model_path
         # Ensure the path explicitly includes 'models/' before the model name
-        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
+        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
     def _is_connected(self):
         try:
@@ -39,7 +39,8 @@ class BrainRouter:
                         except Exception:
                             pass
                     
-                    if status_code in [429, 503] or isinstance(e, (socket.timeout, urllib.error.URLError)):
+                    # Prevent 429 quota exhaustion from looping retries automatically
+                    if status_code == 503 or isinstance(e, (socket.timeout, urllib.error.URLError)):
                         if attempt < max_retries - 1:
                             print(f"Network glitch ({error_message}). Retrying in {backoff_delay}s... (Attempt {attempt + 1}/{max_retries})")
                             time.sleep(backoff_delay)
