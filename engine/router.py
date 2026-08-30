@@ -70,7 +70,7 @@ class BrainRouter:
         )
         
         # 90-second timeout to prevent read operation timeout crashes on mobile data
-        with urllib.request.urlopen(req, timeout=90) as response:
+        with urllib.request.urlopen(req, timeout=/30) as response:
             result = json.loads(response.read().decode("utf-8"))
             return result["candidates"][0]["content"]["parts"][0]["text"]
 
