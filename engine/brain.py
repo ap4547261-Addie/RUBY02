@@ -10,7 +10,7 @@ class RubyBrainCore:
         self.client = genai.Client(api_key=self.api_key)
 
     def generate_text(self, messages_payload):
-        """Handles core text generation using the Gemini 3.6 Flash model."""
+        """Handles core text generation using the Gemini 3.7 Flash model."""
         try:
             # Convert simple dictionary format to contents structure if needed
             response = self.client.models.generate_content(
