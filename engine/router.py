@@ -1,15 +1,16 @@
 # engine/router.py
 import os
 import urllib.request
+import urllib.error
 import json
 import socket
+import time
 
 class BrainRouter:
     def __init__(self, cloud_api_key=None, local_model_path=None):
         self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
         self.local_model_path = local_model_path
-        # Updated to the correct Gemini 3.7 Flash endpoint
-        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
+        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent"
 
     def _is_connected(self):
         try:
@@ -20,20 +21,33 @@ class BrainRouter:
 
     def route_request(self, messages, personality=None, use_cloud_preferred=True):
         if use_cloud_preferred and self.cloud_api_key:
-            try:
-                response = self._call_cloud(messages, personality)
-                if response:
-                    return {"source": "cloud", "response": response}
-            except Exception as e:
-                print(f"Cloud model failed ({e}).")
-                return {"source": "local", "response": f"Cloud Error: {str(e)}"}
+            max_retries = 3
+            backoff_delay = 4  # Initial wait time in seconds
+            
+            for attempt in range(max_retries):
+                try:
+                    response = self._call_cloud(messages, personality)
+                    if response:
+                        return {"source": "cloud", "response": response}
+                except urllib.error.HTTPError as e:
+                    # Catch HTTP 429 Too Many Requests specifically
+                    if e.code == 429:
+                        if attempt < max_retries - 1:
+                            print(f"Rate limited (429). Retrying in {backoff_delay}s... (Attempt {attempt + 1}/{max_retries})")
+                            time.sleep(backoff_delay)
+                            backoff_delay *= 2  # Double the wait time for the next retry
+                            continue
+                    print(f"Cloud model failed ({e}).")
+                    return {"source": "local", "response": f"Cloud Error: {str(e)}"}
+                except Exception as e:
+                    print(f"Cloud model failed ({e}).")
+                    return {"source": "local", "response": f"Cloud Error: {str(e)}"}
 
         return {"source": "local", "response": self._call_local(messages)}
 
     def _call_cloud(self, messages, personality=None):
         gemini_contents = []
         for msg in messages:
-            # Handle system roles safely or map them appropriately for the endpoint
             role = "user" if msg["role"] == "user" else "model"
             gemini_contents.append({
                 "role": role,
@@ -44,7 +58,6 @@ class BrainRouter:
         headers = {"Content-Type": "application/json"}
         payload = {"contents": gemini_contents}
         
-        # Injects her live emotional and state prompt as a system instruction
         if personality:
             payload["system_instruction"] = {
                 "parts": [{"text": personality}]
