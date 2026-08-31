@@ -175,7 +175,7 @@ class BrainRouter:
 
         with urllib.request.urlopen(
             req,
-            timeout=25
+            timeout=60
         ) as response:
 
             result = json.loads(
