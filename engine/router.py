@@ -5,6 +5,7 @@ import urllib.error
 import json
 import socket
 import time
+import http.client
 
 
 class BrainRouter:
@@ -19,7 +20,10 @@ class BrainRouter:
 
     def _is_connected(self):
         try:
-            socket.create_connection(("8.8.8.8", 53), timeout=2)
+            socket.create_connection(
+                ("8.8.8.8", 53),
+                timeout=2
+            )
             return True
         except OSError:
             return False
@@ -77,6 +81,7 @@ class BrainRouter:
                                 f"Gemini temporarily unavailable. "
                                 f"Retrying in {backoff_delay}s..."
                             )
+
                             time.sleep(backoff_delay)
                             backoff_delay *= 2
                             continue
@@ -88,12 +93,16 @@ class BrainRouter:
 
                 except (
                     urllib.error.URLError,
-                    socket.timeout
+                    socket.timeout,
+                    socket.error,
+                    ConnectionResetError,
+                    ConnectionAbortedError,
+                    http.client.RemoteDisconnected
                 ) as e:
 
                     if attempt < max_retries - 1:
                         print(
-                            f"Network error: {e}. "
+                            f"Connection problem: {e}. "
                             f"Retrying in {backoff_delay}s..."
                         )
 
@@ -189,7 +198,13 @@ class BrainRouter:
                 f"Gemini returned no candidates: {result}"
             )
 
-        parts = candidates[0].get("content", {}).get("parts", [])
+        parts = candidates[0].get(
+            "content",
+            {}
+        ).get(
+            "parts",
+            []
+        )
 
         text_parts = [
             part.get("text", "")
