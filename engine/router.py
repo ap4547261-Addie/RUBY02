@@ -61,17 +61,13 @@ class BrainRouter:
 
                     # Never retry quota exhaustion.
                     if status_code == 429:
-                        print(
-                            "Gemini quota/rate limit reached. "
-                            "No automatic retry."
-                        )
+                        print("========== GEMINI 429 ==========")
+                        print(error_message)
+                        print("================================")
 
                         return {
                             "source": "quota",
-                            "response": (
-                                "My cloud brain is temporarily "
-                                "out of requests."
-                            )
+                            "response": f"Gemini 429:\n{error_message}"
                         }
 
                     # Retry temporary server problems.
