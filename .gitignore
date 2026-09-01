@@ -1,0 +1,13 @@
+# Protect API keys
+config.py
+Config.py
+.env
+*.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Misc
+*.log
+.DS_Store
