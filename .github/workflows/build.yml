@@ -50,23 +50,52 @@ jobs:
     
     - name: Generate Config and Build APK
       env:
+        # Chat Keys (1-4) - For complex questions
+        GEMINI_API_KEY1: ${{ secrets.GEMINI_API_KEY1 }}
+        GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
+        GEMINI_API_KEY3: ${{ secrets.GEMINI_API_KEY3 }}
+        GEMINI_API_KEY4: ${{ secrets.GEMINI_API_KEY4 }}
+        # Image Keys (5-9) - For image generation
+        GEMINI_API_KEY5: ${{ secrets.GEMINI_API_KEY5 }}
+        GEMINI_API_KEY6: ${{ secrets.GEMINI_API_KEY6 }}
+        GEMINI_API_KEY7: ${{ secrets.GEMINI_API_KEY7 }}
+        GEMINI_API_KEY8: ${{ secrets.GEMINI_API_KEY8 }}
+        GEMINI_API_KEY9: ${{ secrets.GEMINI_API_KEY9 }}
+        # Fallback (keep for compatibility)
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # Pinecone
         PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
         PINECONE_INDEX_HOST: ${{ secrets.PINECONE_INDEX_HOST }}
         FLET_SUPPRESS_PROMPTS: "true"
       run: |
-        echo "GEMINI_API_KEY = \"$GEMINI_API_KEY\"" > config.py
-        echo "PINECONE_API_KEY = \"$PINECONE_API_KEY\"" >> config.py
-        echo "PINECONE_INDEX_HOST = \"$PINECONE_INDEX_HOST\"" >> config.py
+        # Create config.py with all 9 keys
+        cat > config.py << 'EOF'
+        # Gemini API Keys (1-4 for chat, 5-9 for images)
+        GEMINI_API_KEY1 = "$GEMINI_API_KEY1"
+        GEMINI_API_KEY2 = "$GEMINI_API_KEY2"
+        GEMINI_API_KEY3 = "$GEMINI_API_KEY3"
+        GEMINI_API_KEY4 = "$GEMINI_API_KEY4"
+        GEMINI_API_KEY5 = "$GEMINI_API_KEY5"
+        GEMINI_API_KEY6 = "$GEMINI_API_KEY6"
+        GEMINI_API_KEY7 = "$GEMINI_API_KEY7"
+        GEMINI_API_KEY8 = "$GEMINI_API_KEY8"
+        GEMINI_API_KEY9 = "$GEMINI_API_KEY9"
+        GEMINI_API_KEY = "$GEMINI_API_KEY"
+        PINECONE_API_KEY = "$PINECONE_API_KEY"
+        PINECONE_INDEX_HOST = "$PINECONE_INDEX_HOST"
+        EOF
   
+        # Clean build directory
         rm -rf build/ dist/ .venv/ venv/ __pycache__/
         rm -f RUBY_03.png
+        
+        # Verify config was created
+        cat config.py
+        
+        # Compile Python files
         python3 -m compileall . || exit 1
         
-        # Inject the keys from config.py into environment variables right before building
-        export GEMINI_API_KEY="$GEMINI_API_KEY"
-        export PINECONE_API_KEY="$PINECONE_API_KEY"
-        
+        # Build APK with environment variables
         flet build apk --python-version 3.12 --arch arm64-v8a --yes
         
     - name: Upload APK Artifact
