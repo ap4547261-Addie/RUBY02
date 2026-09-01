@@ -1,7 +1,7 @@
 [project]
 name = "ruby"
 version = "0.1.0"
-description = "Ruby - A living AI influencer with local brain, 9-key Gemini support, and social media learning"
+description = "Ruby - A living human from a parallel world with local brain, 9-key Gemini support, and social media learning"
 authors = [
     {name = "Ruby", email = "ruby@example.com"}
 ]
@@ -21,21 +21,6 @@ dependencies = [
     
     # WebSocket Server
     "websockets>=12.0",
-    
-    # Browser Automation
-    "playwright>=1.40.0",
-    
-    # HTML Parsing (already have built-in)
-    # "html.parser" is built-in
-    
-    # Database (sqlite3 is built-in)
-    # "sqlite3" is built-in
-    
-    # JSON (built-in)
-    # "json" is built-in
-    
-    # Async (built-in)
-    # "asyncio" is built-in
 ]
 
 [project.optional-dependencies]
@@ -44,6 +29,9 @@ dev = [
     "black>=24.0.0",
     "ruff>=0.3.0",
     "mypy>=1.8.0",
+]
+playwright = [
+    "playwright>=1.40.0",
 ]
 
 [tool.uv]
