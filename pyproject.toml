@@ -1,11 +1,72 @@
 [project]
 name = "ruby"
 version = "0.1.0"
-dependencies = [
-    "flet>=0.25.0",
-    "google-genai",
-    "requests",
-    "beautifulsoup4",
-    "websockets"
+description = "Ruby - A living AI influencer with local brain, 9-key Gemini support, and social media learning"
+authors = [
+    {name = "Ruby", email = "ruby@example.com"}
 ]
+readme = "README.md"
 requires-python = ">=3.12"
+dependencies = [
+    # Core UI Framework
+    "flet>=0.25.0",
+    
+    # Google Gemini API
+    "google-genai>=0.3.0",
+    
+    # Web & HTTP
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
+    
+    # WebSocket Server
+    "websockets>=12.0",
+    
+    # Browser Automation
+    "playwright>=1.40.0",
+    
+    # HTML Parsing (already have built-in)
+    # "html.parser" is built-in
+    
+    # Database (sqlite3 is built-in)
+    # "sqlite3" is built-in
+    
+    # JSON (built-in)
+    # "json" is built-in
+    
+    # Async (built-in)
+    # "asyncio" is built-in
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "black>=24.0.0",
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0.0",
+    "black>=24.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["engine", "tools", "memory", "personality"]
+
+[tool.black]
+line-length = 120
+target-version = ['py312']
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
