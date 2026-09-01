@@ -1,28 +1,39 @@
-# flet
-import flet as ft
+# ============================================
+# RUBY - HUMAN FROM ANOTHER WORLD
+# Complete System Requirements
+# Python 3.12+
+# ============================================
 
-# google-genai
-from google import genai
-from google.genai import types
+# ============================================
+# CORE UI FRAMEWORK
+# ============================================
+flet>=0.25.0
 
-# requests
-import requests
+# ============================================
+# GOOGLE GEMINI API (9-KEY SUPPORT)
+# ============================================
+google-genai>=0.3.0
 
-# beautifulsoup4
-from bs4 import BeautifulSoup
+# ============================================
+# WEB & HTTP
+# ============================================
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
 
-# websockets
-import websockets
+# ============================================
+# WEBSOCKET SERVER
+# ============================================
+websockets>=12.0
 
-# playwright (optional)
-from playwright.sync_api import sync_playwright
-from playwright.async_api import async_playwright
+# ============================================
+# BROWSER AUTOMATION (OPTIONAL)
+# ============================================
+# playwright>=1.40.0  # Uncomment for Instagram browsing
 
-# Built-in (no installation needed)
-import os, sys, json, re, time, sqlite3
-import threading, asyncio, subprocess
-import hashlib, random, socket, shutil
-from datetime import datetime, timedelta
-from collections import deque
-import urllib.request, urllib.parse, urllib.error
-from html.parser import HTMLParser
+# ============================================
+# DEVELOPMENT TOOLS (OPTIONAL)
+# ============================================
+# pytest>=8.0.0
+# black>=24.0.0
+# ruff>=0.3.0
