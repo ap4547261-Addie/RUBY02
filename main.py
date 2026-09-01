@@ -16,11 +16,11 @@ from tools.browser import BrowserToolServer
 router = BrainRouter(cloud_api_key=getattr(config, "GEMINI_API_KEY", None))
 brain_core = RubyBrainCore(api_key=getattr(config, "GEMINI_API_KEY", None))
 
-# Initialize Hybrid Memory System
+# Initialize Hybrid Memory System (Local-Only)
 hybrid_memory = HybridMemorySystem(
     sqlite_path="ruby_memory.db",
-    pinecone_api_key=getattr(config, "PINECONE_API_KEY", None),
-    index_host=getattr(config, "PINECONE_INDEX_HOST", None)
+    pinecone_api_key=None,  # Force local-only mode
+    index_host=None
 )
 
 PINECONE_API_KEY = getattr(config, "PINECONE_API_KEY", "")
@@ -106,6 +106,35 @@ conversation_history = []
 
 ui_page_ref = None
 chat_list_ref = None
+status_label_ref = None
+
+def update_ruby_status():
+    """Update Ruby's status display with her current energy and mood"""
+    if status_label_ref and ui_page_ref:
+        try:
+            status = router.energy.get_energy_status()
+            
+            if router.energy.is_sleeping:
+                if router.energy.sleep_until:
+                    remaining = router.energy.sleep_until - datetime.now()
+                    hours = remaining.seconds // 3600
+                    minutes = (remaining.seconds % 3600) // 60
+                    status_label_ref.value = f"💤 Sleeping... {hours}h {minutes}m remaining"
+                else:
+                    status_label_ref.value = "💤 Sleeping..."
+            else:
+                # Show energy percentage and mood
+                energy_percent = int(status.get("energy", 100))
+                emoji = status.get("emoji", "✨")
+                remaining = status.get("remaining", 0)
+                status_label_ref.value = f"{emoji} {energy_percent}% - {status.get('message', 'Awake')}"
+                
+                if remaining > 0:
+                    status_label_ref.value += f" ({remaining} left)"
+            
+            ui_page_ref.update()
+        except Exception as e:
+            print(f"Status update error: {e}")
 
 def add_message(sender, text, is_user=False, image_path=None):
     if chat_list_ref and ui_page_ref:
@@ -129,7 +158,7 @@ def add_message(sender, text, is_user=False, image_path=None):
         ui_page_ref.update()
 
 def main_app_ui(page: ft.Page):
-    global ui_page_ref, chat_list_ref, conversation_history
+    global ui_page_ref, chat_list_ref, conversation_history, status_label_ref
     ui_page_ref = page
     
     page.title = "Ruby"
@@ -158,6 +187,15 @@ def main_app_ui(page: ft.Page):
         )  
         chat_list.controls.append(bubble)
 
+    # Status label
+    status_label = ft.Text(
+        "✨ Checking status...",
+        size=11,
+        color=ft.Colors.GREY_400,
+        weight=ft.FontWeight.NORMAL
+    )
+    status_label_ref = status_label
+
     user_input = ft.TextField(  
         hint_text="Say something to Ruby or ask her to draw...",  
         border_color="#3A3A46",  
@@ -169,7 +207,29 @@ def main_app_ui(page: ft.Page):
     )  
 
     def process_generation(text):
-        try:  
+        try:
+            # Check if Ruby is available
+            if not router.energy.is_available():
+                # Ruby is sleeping
+                if router.energy.is_sleeping:
+                    if router.energy.sleep_until and datetime.now() < router.energy.sleep_until:
+                        add_message("Ruby", "I'm sleeping... Talk to me tomorrow! 💤")
+                        return
+                    else:
+                        # Just woke up!
+                        router.energy._wake_up()
+                        wake_msg = router.energy.get_wake_message()
+                        add_message("Ruby", f"{wake_msg}\n\nWhat did I miss?")
+                        update_ruby_status()
+                        return
+                
+                # If still not available, go to sleep
+                if not router.energy.is_available():
+                    router.energy._go_to_sleep()
+                    add_message("Ruby", router.energy.get_sleep_message())
+                    update_ruby_status()
+                    return
+
             current_depth = hybrid_memory.increment_interaction()
             current_memories = hybrid_memory.search_memories(text)
             
@@ -185,6 +245,13 @@ def main_app_ui(page: ft.Page):
 
             routed_result = router.route_request(messages_payload, use_cloud_preferred=True)
             reply = routed_result["response"]
+            
+            # Check if Ruby went to sleep during the response
+            if router.energy.is_sleeping:
+                add_message("Ruby", reply)
+                add_message("Ruby", f"\n💤 {router.energy.get_sleep_message()}")
+                update_ruby_status()
+                return
 
             conversation_history.append({"role": "user", "content": text})
             conversation_history.append({"role": "assistant", "content": reply})
@@ -217,9 +284,20 @@ def main_app_ui(page: ft.Page):
                 
                 generated_img_path = brain_core.generate_image(phone_camera_prompt)
 
-            add_message("Ruby", reply, image_path=generated_img_path)  
+            add_message("Ruby", reply, image_path=generated_img_path)
+            
+            # Update Ruby's status after interaction
+            update_ruby_status()
+            
+            # Check if Ruby is getting tired
+            status = router.energy.get_energy_status()
+            if status.get("energy", 100) < 20:
+                add_message("Ruby", "\nUgh, I'm getting really tired... Might need to sleep soon. 😴")
+            
         except Exception as ex:  
-            add_message("Ruby", f"Ugh, connection dropped... ({str(ex)})")
+            error_msg = f"Ugh, connection dropped... ({str(ex)})"
+            add_message("Ruby", error_msg)
+            print(f"Error: {ex}")
 
     def send_click(e):  
         text = user_input.value.strip()  
@@ -241,17 +319,25 @@ def main_app_ui(page: ft.Page):
 
     input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)  
 
+    # Header with status
+    header = ft.Container(  
+        content=ft.Row([
+            ft.Text("RUBY // GENIUS HUMAN CORE", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
+            status_label
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        padding=5
+    )
+
     page.add(  
         ft.Column([  
-            ft.Container(  
-                content=ft.Text("RUBY // GENIUS HUMAN CORE", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),  
-                alignment=ft.alignment.Alignment(0, 0),  
-                padding=5  
-            ),  
+            header,
             chat_list,  
             input_row  
         ], expand=True)  
-    )  
+    )
+    
+    # Update status on startup
+    update_ruby_status()
     page.update()
 
 def start_background_websocket():
