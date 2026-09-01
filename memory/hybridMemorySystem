@@ -1,33 +1,101 @@
+# engine/vector_store.py
 import os
 import sqlite3
-from google import genai
+import json
+from datetime import datetime
 
 class HybridMemorySystem:
-    def __init__(self, sqlite_path="ruby_memory.db"):
+    def __init__(self, sqlite_path="ruby_memory.db", pinecone_api_key=None, index_host=None):
         self.sqlite_path = sqlite_path
+        self.pinecone_api_key = pinecone_api_key or os.getenv("PINECONE_API_KEY")
+        self.index_host = index_host or os.getenv("PINECONE_INDEX_HOST")
+        
+        # Local-only mode - 0 API calls for memory
+        self.use_pinecone = False
+        
         self._init_sqlite()
+        self._migrate_schema()
+        
+        print(f"HybridMemorySystem initialized in LOCAL-ONLY mode (0 API calls)")
 
     def _init_sqlite(self):
+        """Initialize SQLite database with enhanced schema"""
         conn = sqlite3.connect(self.sqlite_path)
         cursor = conn.cursor()
+        
+        # Memories table with importance and timestamps
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS memories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                fact TEXT UNIQUE
+                fact TEXT UNIQUE,
+                importance INTEGER DEFAULT 1,
+                synced INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                category TEXT DEFAULT 'general'
             )
         """)
+        
+        # Stats table with better typing
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS stats (
                 key TEXT PRIMARY KEY,
-                value TEXT
+                value TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cursor.execute("INSERT OR IGNORE INTO stats (key, value) VALUES ('interaction_count', '0')")
-        cursor.execute("INSERT OR IGNORE INTO stats (key, value) VALUES ('mood', 'neutral')")
+        
+        # Initialize stats
+        default_stats = {
+            'interaction_count': '0',
+            'mood': 'neutral',
+            'total_memories': '0',
+            'important_memories': '0',
+            'conversations_today': '0',
+            'last_reset': datetime.now().isoformat()
+        }
+        
+        for key, value in default_stats.items():
+            cursor.execute("""
+                INSERT OR IGNORE INTO stats (key, value) 
+                VALUES (?, ?)
+            """, (key, value))
+        
+        # Create indexes for faster search
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_fact ON memories(fact)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at DESC)")
+        
         conn.commit()
         conn.close()
 
+    def _migrate_schema(self):
+        """Migrate old schema if needed"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            
+            # Check for old columns
+            cursor.execute("PRAGMA table_info(memories)")
+            columns = [col[1] for col in cursor.fetchall()]
+            
+            # Add missing columns
+            if 'importance' not in columns:
+                cursor.execute("ALTER TABLE memories ADD COLUMN importance INTEGER DEFAULT 1")
+            if 'synced' not in columns:
+                cursor.execute("ALTER TABLE memories ADD COLUMN synced INTEGER DEFAULT 0")
+            if 'created_at' not in columns:
+                cursor.execute("ALTER TABLE memories ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            if 'category' not in columns:
+                cursor.execute("ALTER TABLE memories ADD COLUMN category TEXT DEFAULT 'general'")
+            
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Migration error: {e}")
+
     def get_state(self) -> dict:
+        """Get current state from stats"""
         conn = sqlite3.connect(self.sqlite_path)
         cursor = conn.cursor()
         cursor.execute("SELECT key, value FROM stats")
@@ -36,58 +104,342 @@ class HybridMemorySystem:
         
         state = {}
         for key, value in rows:
-            if key == 'interaction_count':
+            if key in ['interaction_count', 'total_memories', 'important_memories', 'conversations_today']:
                 state[key] = int(value) if value else 0
             else:
                 state[key] = value
         return state
 
     def update_state(self, new_state: dict):
+        """Update state in stats"""
         conn = sqlite3.connect(self.sqlite_path)
         cursor = conn.cursor()
         for key, value in new_state.items():
-            cursor.execute(
-                "INSERT INTO stats (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
-                (key, str(value), str(value))
-            )
+            cursor.execute("""
+                INSERT INTO stats (key, value, updated_at) 
+                VALUES (?, ?, CURRENT_TIMESTAMP) 
+                ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
+            """, (key, str(value), str(value)))
         conn.commit()
         conn.close()
 
-    def save_hybrid_memory(self, fact: str):
+    def increment_interaction(self) -> int:
+        """Increment and return interaction count"""
+        conn = sqlite3.connect(self.sqlite_path)
+        cursor = conn.cursor()
+        
+        # Get current count
+        cursor.execute("SELECT value FROM stats WHERE key = 'interaction_count'")
+        row = cursor.fetchone()
+        count = int(row[0]) if row and row[0] else 0
+        
+        # Increment
+        new_count = count + 1
+        cursor.execute("""
+            UPDATE stats SET value = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE key = 'interaction_count'
+        """, (str(new_count),))
+        
+        # Also update conversations_today
+        cursor.execute("SELECT value FROM stats WHERE key = 'conversations_today'")
+        row = cursor.fetchone()
+        today_count = int(row[0]) if row and row[0] else 0
+        cursor.execute("""
+            UPDATE stats SET value = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE key = 'conversations_today'
+        """, (str(today_count + 1),))
+        
+        conn.commit()
+        conn.close()
+        return new_count
+
+    def get_interaction_count(self) -> int:
+        """Get current interaction count"""
+        conn = sqlite3.connect(self.sqlite_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM stats WHERE key = 'interaction_count'")
+        row = cursor.fetchone()
+        conn.close()
+        return int(row[0]) if row and row[0] else 0
+
+    def save_hybrid_memory(self, fact: str, importance: int = 1, category: str = 'general'):
+        """Save a memory to SQLite - 0 API calls"""
         try:
             conn = sqlite3.connect(self.sqlite_path)
             cursor = conn.cursor()
-            cursor.execute("INSERT OR IGNORE INTO memories (fact) VALUES (?)", (fact,))
+            
+            # Check if fact already exists
+            cursor.execute("SELECT id FROM memories WHERE fact = ?", (fact,))
+            existing = cursor.fetchone()
+            
+            if existing:
+                # Update importance if higher
+                cursor.execute("""
+                    UPDATE memories 
+                    SET importance = MAX(importance, ?), category = ?
+                    WHERE fact = ?
+                """, (importance, category, fact))
+            else:
+                cursor.execute("""
+                    INSERT INTO memories (fact, importance, category, created_at) 
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                """, (fact, importance, category))
+                
+                # Update total memories count
+                cursor.execute("""
+                    UPDATE stats SET value = CAST(value AS INTEGER) + 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE key = 'total_memories'
+                """)
+            
+            if importance >= 3:
+                cursor.execute("""
+                    UPDATE stats SET value = CAST(value AS INTEGER) + 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE key = 'important_memories'
+                """)
+            
             conn.commit()
             conn.close()
+            print(f"Memory saved: {fact[:50]}... (importance: {importance})")
         except Exception as e:
             print(f"SQLite Save Error: {e}")
 
-    def search_memories(self, query: str, limit=5) -> str:
+    def search_memories(self, query: str, limit: int = 5) -> str:
+        """Search local memories - 0 API calls, just SQLite"""
         memories_found = []
+        
         try:
             conn = sqlite3.connect(self.sqlite_path)
             cursor = conn.cursor()
-            cursor.execute("SELECT fact FROM memories ORDER BY id DESC LIMIT ?", (limit,))
+            
+            # Split query into keywords for better matching
+            keywords = query.lower().split()
+            
+            # Build dynamic WHERE clause
+            if keywords:
+                conditions = []
+                params = []
+                for kw in keywords:
+                    if len(kw) > 2:  # Skip very short words
+                        conditions.append("LOWER(fact) LIKE ?")
+                        params.append(f"%{kw}%")
+                
+                if conditions:
+                    sql = f"""
+                        SELECT fact, importance, created_at 
+                        FROM memories 
+                        WHERE {' OR '.join(conditions)}
+                        ORDER BY importance DESC, created_at DESC
+                        LIMIT ?
+                    """
+                    params.append(limit)
+                    cursor.execute(sql, params)
+                else:
+                    # Fallback to most recent
+                    cursor.execute("""
+                        SELECT fact, importance, created_at 
+                        FROM memories 
+                        ORDER BY importance DESC, created_at DESC
+                        LIMIT ?
+                    """, (limit,))
+            else:
+                # No keywords - return most recent
+                cursor.execute("""
+                    SELECT fact, importance, created_at 
+                    FROM memories 
+                    ORDER BY importance DESC, created_at DESC
+                    LIMIT ?
+                """, (limit,))
+            
             rows = cursor.fetchall()
             conn.close()
-            for row in rows:
-                if row[0] not in memories_found:
-                    memories_found.append(row[0])
+            
+            # Format results with importance indicators
+            for fact, importance, created_at in rows:
+                if fact not in memories_found:
+                    if importance >= 3:
+                        prefix = "🔴 Important: "
+                    elif importance >= 2:
+                        prefix = "🟡 "
+                    else:
+                        prefix = "🟢 "
+                    memories_found.append(f"{prefix}{fact}")
+            
         except Exception as e:
             print(f"SQLite Read Error: {e}")
+            return "No deep memories formed yet."
 
         if not memories_found:
             return "No deep memories formed yet."
+        
         return ", ".join(memories_found)
 
+    def get_all_memories(self, limit: int = 10) -> list:
+        """Get all memories as list"""
+        conn = sqlite3.connect(self.sqlite_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT fact FROM memories 
+            ORDER BY importance DESC, created_at DESC 
+            LIMIT ?
+        """, (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+
+    def get_memories_by_category(self, category: str, limit: int = 10) -> list:
+        """Get memories by category"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT fact, importance, created_at 
+                FROM memories 
+                WHERE category = ?
+                ORDER BY importance DESC, created_at DESC
+                LIMIT ?
+            """, (category, limit))
+            rows = cursor.fetchall()
+            conn.close()
+            return [row[0] for row in rows]
+        except Exception as e:
+            print(f"Category search error: {e}")
+            return []
+
+    def get_recent_memories(self, limit: int = 5) -> list:
+        """Get most recent memories"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT fact, created_at 
+                FROM memories 
+                ORDER BY created_at DESC 
+                LIMIT ?
+            """, (limit,))
+            rows = cursor.fetchall()
+            conn.close()
+            return [row[0] for row in rows]
+        except Exception as e:
+            print(f"Recent memories error: {e}")
+            return []
+
+    def get_important_memories(self, limit: int = 10) -> list:
+        """Get most important memories"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT fact, created_at 
+                FROM memories 
+                WHERE importance >= 3
+                ORDER BY importance DESC, created_at DESC
+                LIMIT ?
+            """, (limit,))
+            rows = cursor.fetchall()
+            conn.close()
+            return [row[0] for row in rows]
+        except Exception as e:
+            print(f"Important memories error: {e}")
+            return []
+
+    def mark_memory_important(self, fact: str):
+        """Mark a memory as important"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE memories 
+                SET importance = 3 
+                WHERE fact = ?
+            """, (fact,))
+            conn.commit()
+            conn.close()
+            print(f"Memory marked as important: {fact[:50]}...")
+        except Exception as e:
+            print(f"Mark important error: {e}")
+
+    def cleanup_old_memories(self, days: int = 30):
+        """Clean up old low-importance memories"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM memories 
+                WHERE created_at < datetime('now', ?) 
+                AND importance < 2
+            """, (f'-{days} days',))
+            deleted = cursor.rowcount
+            conn.commit()
+            conn.close()
+            print(f"Cleaned up {deleted} old memories")
+        except Exception as e:
+            print(f"Cleanup error: {e}")
+
+    def reset_daily_counters(self):
+        """Reset daily counters (called when Ruby wakes up)"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE stats SET value = '0', updated_at = CURRENT_TIMESTAMP
+                WHERE key = 'conversations_today'
+            """)
+            cursor.execute("""
+                UPDATE stats SET value = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE key = 'last_reset'
+            """, (datetime.now().isoformat(),))
+            conn.commit()
+            conn.close()
+            print("Daily counters reset")
+        except Exception as e:
+            print(f"Reset counters error: {e}")
+
+    def get_stats(self) -> dict:
+        """Get memory system stats"""
+        conn = sqlite3.connect(self.sqlite_path)
+        cursor = conn.cursor()
+        
+        stats = {}
+        cursor.execute("SELECT key, value FROM stats")
+        for key, value in cursor.fetchall():
+            if key in ['interaction_count', 'total_memories', 'important_memories', 'conversations_today']:
+                stats[key] = int(value) if value else 0
+            else:
+                stats[key] = value
+        
+        # Additional counts
+        cursor.execute("SELECT COUNT(*) FROM memories")
+        stats['total_memories_db'] = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM memories WHERE importance >= 3")
+        stats['important_memories_db'] = cursor.fetchone()[0]
+        
+        conn.close()
+        return stats
+
     def process(self, response: str, user_message: str):
+        """Process response for memory extraction"""
         if "[SAVE_MEMORY:" in response:
             try:
                 start = response.index("[SAVE_MEMORY:") + len("[SAVE_MEMORY:")
                 end = response.index("]", start)
                 fact = response[start:end].strip()
                 if fact:
-                    self.save_hybrid_memory(fact)
+                    # Extract importance if specified
+                    importance = 1
+                    category = 'general'
+                    
+                    # Check for importance marker
+                    if "IMPORTANT:" in fact:
+                        parts = fact.split("IMPORTANT:")
+                        fact = parts[0].strip()
+                        importance = 3
+                        category = 'important'
+                    elif "CATEGORY:" in fact:
+                        parts = fact.split("CATEGORY:")
+                        fact = parts[0].strip()
+                        category = parts[1].split()[0].strip() if len(parts) > 1 else 'general'
+                    
+                    self.save_hybrid_memory(fact, importance, category)
             except Exception as e:
                 print(f"Memory extraction error: {e}")
