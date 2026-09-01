@@ -1,137 +1,143 @@
-# tools/websocket_handler.py - NEW FILE
-import json
-import threading
+# tools/websocket_server.py - NEW FILE
 import asyncio
+import json
+import websockets
 from datetime import datetime
-from tools.data_ingestion import DataIngestion
-from tools.web_learner import WebLearner
-from tools.video_learner import VideoLearner
-from tools.instagram_connector import InstagramConnector
+from typing import Dict, Any
 
-class WebSocketHandler:
+class RubyWebSocketServer:
     """
-    Handles WebSocket messages from browser extension
-    Routes content to Ruby's learning systems
+    WebSocket server for Ruby's browser extension communication
     """
     
-    def __init__(self, hybrid_memory, data_ingestion, web_learner, video_learner, instagram_connector):
-        self.memory = hybrid_memory
-        self.data_ingestion = data_ingestion
-        self.web_learner = web_learner
-        self.video_learner = video_learner
-        self.instagram_connector = instagram_connector
+    def __init__(self, handler, host="localhost", port=8765):
+        self.handler = handler
+        self.host = host
+        self.port = port
+        self.server = None
+        self.clients = set()
+        self.total_connections = 0
+        self.start_time = datetime.now()
         
-        self.message_count = 0
-        print("🔌 WebSocketHandler initialized - Ruby can receive data from browser!")
+        print(f"🔌 Ruby WebSocket Server initializing on ws://{host}:{port}")
     
-    async def handle_message(self, message: dict):
-        """
-        Process messages from browser extension
-        """
-        self.message_count += 1
-        platform = message.get("platform", "unknown")
-        content = message.get("content", "")
-        
-        print(f"📨 Received message #{self.message_count} from {platform}")
-        
-        # Route based on platform
-        if "instagram" in platform.lower():
-            await self._handle_instagram_content(content)
-        elif "youtube" in platform.lower() or "video" in platform.lower():
-            await self._handle_video_content(content)
-        elif "duckduckgo" in platform.lower() or "search" in platform.lower():
-            await self._handle_search_content(content)
-        else:
-            await self._handle_general_content(content, platform)
-        
-        # Store in memory
-        self.memory.save_hybrid_memory(
-            f"Received data from {platform} at {datetime.now().strftime('%H:%M')}",
-            importance=2,
-            category="browser_extension"
-        )
-    
-    async def _handle_instagram_content(self, content: str):
-        """Process Instagram content"""
-        # Extract useful information
-        lines = content.split('\n')
-        for line in lines[:10]:  # Process first 10 lines
-            if line.strip():
-                self.memory.save_hybrid_memory(
-                    f"Instagram content: {line[:100]}",
-                    importance=2,
-                    category="instagram_web"
-                )
-        
-        # Learn from content
-        self.data_ingestion.learn_from_text(
-            f"Instagram data from browser: {content[:500]}",
-            category="instagram_web",
-            importance=2
-        )
-    
-    async def _handle_video_content(self, content: str):
-        """Process video content (YouTube)"""
-        # Extract video titles or metadata
-        import re
-        video_titles = re.findall(r'"title":"([^"]+)"', content)
-        
-        for title in video_titles[:3]:
-            self.memory.save_hybrid_memory(
-                f"Video found: {title}",
-                importance=2,
-                category="video_web"
-            )
-        
-        # Learn from content
-        self.data_ingestion.learn_from_text(
-            f"Video content from browser: {content[:500]}",
-            category="video_web",
-            importance=2
-        )
-    
-    async def _handle_search_content(self, content: str):
-        """Process search results"""
-        # Extract search results
-        import re
-        results = re.findall(r'<a[^>]+href="([^"]+)"[^>]*>([^<]+)</a>', content)
-        
-        for url, title in results[:5]:
-            if 'youtube.com' in url:
-                self.video_learner.get_video_metadata(url)
-            else:
-                self.memory.save_hybrid_memory(
-                    f"Search result: {title[:50]}",
-                    importance=1,
-                    category="search_web"
-                )
-        
-        # Learn from content
-        self.data_ingestion.learn_from_text(
-            f"Search results from browser: {content[:500]}",
-            category="search_web",
-            importance=2
-        )
-    
-    async def _handle_general_content(self, content: str, platform: str):
-        """Process general web content"""
-        # Learn from content
-        self.data_ingestion.learn_from_text(
-            f"Web content from {platform}: {content[:500]}",
-            category="web_content",
-            importance=2
+    async def start_server(self):
+        """Start the WebSocket server"""
+        self.server = await websockets.serve(
+            self.handle_client,
+            self.host,
+            self.port,
+            ping_interval=30,
+            ping_timeout=10
         )
         
-        # Store in memory
-        self.memory.save_hybrid_memory(
-            f"Learned from {platform}: {content[:100]}...",
-            importance=2,
-            category="web_learning"
-        )
+        print(f"✅ Ruby WebSocket Server running on ws://{self.host}:{self.port}")
+        print(f"📡 Waiting for browser extension connections...")
+        
+        # Keep server running
+        await self.server.wait_closed()
     
-    def get_stats(self) -> dict:
-        """Get handler statistics"""
+    async def handle_client(self, websocket, path):
+        """Handle incoming WebSocket connections"""
+        client_id = self.total_connections + 1
+        self.total_connections += 1
+        self.clients.add(websocket)
+        
+        print(f"🔗 Client #{client_id} connected from {websocket.remote_address}")
+        
+        try:
+            # Send welcome message
+            await websocket.send(json.dumps({
+                "type": "welcome",
+                "message": "Connected to Ruby's brain! 🧠",
+                "timestamp": datetime.now().isoformat(),
+                "client_id": client_id
+            }))
+            
+            # Handle messages
+            async for message in websocket:
+                try:
+                    # Parse JSON message
+                    data = json.loads(message)
+                    
+                    # Process through handler
+                    if self.handler:
+                        await self.handler.handle_message(data)
+                    
+                    # Send acknowledgment
+                    await websocket.send(json.dumps({
+                        "type": "acknowledgment",
+                        "message": "Data received and processed ✅",
+                        "timestamp": datetime.now().isoformat(),
+                        "platform": data.get("platform", "unknown"),
+                        "content_length": len(data.get("content", ""))
+                    }))
+                    
+                except json.JSONDecodeError as e:
+                    print(f"❌ Invalid JSON from client #{client_id}: {e}")
+                    await websocket.send(json.dumps({
+                        "type": "error",
+                        "message": "Invalid JSON format",
+                        "error": str(e)
+                    }))
+                except Exception as e:
+                    print(f"❌ Error processing message: {e}")
+                    await websocket.send(json.dumps({
+                        "type": "error",
+                        "message": "Error processing message",
+                        "error": str(e)
+                    }))
+                    
+        except websockets.exceptions.ConnectionClosed as e:
+            print(f"🔌 Client #{client_id} disconnected: {e}")
+        except Exception as e:
+            print(f"❌ Client #{client_id} error: {e}")
+        finally:
+            self.clients.remove(websocket)
+            print(f"📊 Active connections: {len(self.clients)}")
+    
+    async def broadcast(self, message: Dict[str, Any]):
+        """Broadcast message to all connected clients"""
+        if not self.clients:
+            return
+        
+        message_str = json.dumps(message)
+        disconnected = set()
+        
+        for client in self.clients:
+            try:
+                await client.send(message_str)
+            except Exception:
+                disconnected.add(client)
+        
+        # Remove disconnected clients
+        for client in disconnected:
+            self.clients.remove(client)
+    
+    async def send_to_client(self, client_id: int, message: Dict[str, Any]):
+        """Send message to specific client"""
+        # Find client by ID (would need to store mapping)
+        # For now, broadcast to all
+        await self.broadcast(message)
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get server statistics"""
         return {
-            "total_messages": self.message_count,
-            "last_message": datetime.now().isoformat()
+            "status": "running" if self.server else "stopped",
+            "host": self.host,
+            "port": self.port,
+            "active_connections": len(self.clients),
+            "total_connections": self.total_connections,
+            "start_time": self.start_time.isoformat(),
+            "uptime_seconds": (datetime.now() - self.start_time).total_seconds()
         }
+
+# Singleton instance
+_websocket_server = None
+
+def get_websocket_server(handler=None, host="localhost", port=8765):
+    """Get or create WebSocket server instance"""
+    global _websocket_server
+    if _websocket_server is None:
+        _websocket_server = RubyWebSocketServer(handler, host, port)
+    return _websocket_server
