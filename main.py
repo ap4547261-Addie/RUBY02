@@ -10,13 +10,15 @@ import config
 from engine.router import BrainRouter
 from engine.brain import RubyBrainCore
 from engine.vector_store import HybridMemorySystem
+from engine.engine import RubyEngine
 from tools.browser import BrowserToolServer
 from tools.data_ingestion import DataIngestion
 from tools.web_learner import WebLearner
 from tools.video_learner import VideoLearner
-from tools.instagram_connector import InstagramConnector  
+from tools.instagram_connector import InstagramConnector
 from tools.websocket_handler import WebSocketHandler
 from tools.websocket_server import RubyWebSocketServer
+from personality.ruby import RUBY_PROMPT
 
 # ============================================
 # 1. INITIALIZE CORE BRAIN MODULES
@@ -55,14 +57,25 @@ video_learner = VideoLearner(data_ingestion)
 print("🎬 VideoLearner initialized (0 API calls)")
 
 # Instagram Connector - Learn from Instagram
-instagram_connector = InstagramConnector(
-    hybrid_memory,
-    data_dir=os.path.join(os.getenv("FLET_APP_STORAGE_DATA", "."), "instagram_data")
-)
+instagram_connector = InstagramConnector(hybrid_memory)
 print("📸 Instagram Connector initialized (0 API calls)")
 
 # ============================================
-# 4. INITIALIZE WEBSOCKET SERVER
+# 4. INITIALIZE RUBY ENGINE
+# ============================================
+
+ruby_engine = RubyEngine(
+    memory=hybrid_memory,
+    knowledge=data_ingestion,
+    tools=None,
+    router=router,
+    brain_core=brain_core,
+    personality=RUBY_PROMPT
+)
+print("🧠 RubyEngine initialized!")
+
+# ============================================
+# 5. INITIALIZE WEBSOCKET SERVER
 # ============================================
 
 # WebSocket Handler - Routes incoming data
@@ -100,7 +113,7 @@ ws_thread.start()
 print("🔌 WebSocket server running on ws://localhost:8765")
 
 # ============================================
-# 5. PERSISTENT STORAGE - CHAT HISTORY
+# 6. PERSISTENT STORAGE - CHAT HISTORY
 # ============================================
 
 STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
@@ -123,7 +136,7 @@ def save_chat_history():
         print(f"Failed to save history: {e}")
 
 # ============================================
-# 6. RUBY'S PERSONALITY PROMPT
+# 7. RUBY'S PERSONALITY PROMPT
 # ============================================
 
 # Dynamically calculate her current age
@@ -185,7 +198,7 @@ RUBY_PROMPT = build_ruby_prompt(interaction_depth=0)
 conversation_history = []
 
 # ============================================
-# 7. UI STATE
+# 8. UI STATE
 # ============================================
 
 ui_page_ref = None
@@ -193,7 +206,7 @@ chat_list_ref = None
 status_label_ref = None
 
 # ============================================
-# 8. UI FUNCTIONS
+# 9. UI FUNCTIONS
 # ============================================
 
 def update_ruby_status():
@@ -246,7 +259,7 @@ def add_message(sender, text, is_user=False, image_path=None):
         ui_page_ref.update()
 
 # ============================================
-# 9. WEB SEARCH AND LEARNING
+# 10. WEB SEARCH AND LEARNING
 # ============================================
 
 def search_and_learn(query: str) -> str:
@@ -273,7 +286,7 @@ def search_and_learn(query: str) -> str:
         return f"❌ Search error: {str(e)}"
 
 # ============================================
-# 10. MAIN UI
+# 11. MAIN UI
 # ============================================
 
 def main_app_ui(page: ft.Page):
@@ -373,21 +386,8 @@ def main_app_ui(page: ft.Page):
                     save_chat_history()
                     return
             
-            # Normal conversation flow
-            current_memories = hybrid_memory.search_memories(text)
-            
-            system_payload = (
-                f"{RUBY_PROMPT}\n\n"
-                f"[Live Evolution Metrics - Message Count: {current_depth}]\n"
-                f"[Retrieved Long-Term Memories: {current_memories}]"
-            )
-
-            messages_payload = [{"role": "system", "content": system_payload}]
-            messages_payload.extend(conversation_history)
-            messages_payload.append({"role": "user", "content": text})
-
-            routed_result = router.route_request(messages_payload, use_cloud_preferred=True)
-            reply = routed_result["response"]
+            # Normal conversation flow - Use RubyEngine
+            reply = ruby_engine.think(text)
             
             # Check if Ruby went to sleep
             if router.energy.is_sleeping:
@@ -400,6 +400,7 @@ def main_app_ui(page: ft.Page):
             conversation_history.append({"role": "assistant", "content": reply})
             save_chat_history()
 
+            # Check for memory saving tags
             if "[SAVE_MEMORY:" in reply:  
                 parts = reply.split("[SAVE_MEMORY:")  
                 clean_reply = parts[0].strip()  
@@ -407,6 +408,7 @@ def main_app_ui(page: ft.Page):
                 hybrid_memory.save_hybrid_memory(memory_fact)  
                 reply = f"{clean_reply}\n\n*(Memory Saved: {memory_fact})*"  
 
+            # Check for image generation tags
             generated_img_path = None
             if "[GENERATE_IMAGE:" in reply:
                 parts = reply.split("[GENERATE_IMAGE:")
@@ -458,6 +460,7 @@ def main_app_ui(page: ft.Page):
 
     input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)  
 
+    # Header with status
     header = ft.Container(  
         content=ft.Row([
             ft.Text("RUBY // GENIUS HUMAN CORE", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
@@ -474,11 +477,12 @@ def main_app_ui(page: ft.Page):
         ], expand=True)  
     )
     
+    # Update status on startup
     update_ruby_status()
     page.update()
 
 # ============================================
-# 11. STARTUP
+# 12. STARTUP
 # ============================================
 
 if __name__ == "__main__":
