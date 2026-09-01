@@ -1,4 +1,4 @@
-# tools/instagram_connector.py
+# tools/Instagram_connector.py
 import os
 import json
 import random
