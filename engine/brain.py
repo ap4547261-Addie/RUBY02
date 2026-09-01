@@ -1,29 +1,149 @@
 # engine/brain.py
 import os
+import threading
+from datetime import datetime
 from google import genai
 from google.genai import types
-from datetime import datetime
 
 class RubyBrainCore:
     def __init__(self, api_key=None):
+        """Initialize Ruby's brain with 9-key support"""
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.client = genai.Client(api_key=self.api_key)
+        
+        # Load all 9 keys from environment
+        self.chat_keys = []
+        self.image_keys = []
+        
+        # Keys 1-4 for chat/complex questions
+        for i in range(1, 5):
+            key = os.getenv(f"GEMINI_API_KEY{i}")
+            if key:
+                self.chat_keys.append(key)
+        
+        # Keys 5-9 for image generation
+        for i in range(5, 10):
+            key = os.getenv(f"GEMINI_API_KEY{i}")
+            if key:
+                self.image_keys.append(key)
+        
+        # Fallback if no keys found
+        if not self.chat_keys and not self.image_keys:
+            if self.api_key:
+                self.chat_keys = [self.api_key]
+                self.image_keys = [self.api_key]
+        
+        # Initialize clients (lazy loading)
+        self._chat_clients = {}
+        self._image_clients = {}
+        self._lock = threading.Lock()
+        
+        # Track key usage
+        self.chat_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.chat_keys}
+        self.image_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.image_keys}
+        
+        self.chat_index = 0
+        self.image_index = 0
+        
+        print(f"RubyBrainCore initialized with {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys")
+    
+    def _get_chat_key(self):
+        """Get available chat key with usage tracking"""
+        with self._lock:
+            today = datetime.now().date()
+            
+            # Reset counts for new day
+            for key in self.chat_usage:
+                if self.chat_usage[key]["day"] != today:
+                    self.chat_usage[key]["count"] = 0
+                    self.chat_usage[key]["day"] = today
+            
+            # Find available key
+            for _ in range(len(self.chat_keys)):
+                key = self.chat_keys[self.chat_index]
+                if self.chat_usage[key]["count"] < 20:
+                    self.chat_usage[key]["count"] += 1
+                    self.chat_index = (self.chat_index + 1) % len(self.chat_keys)
+                    print(f"Using chat key {key[:10]}... (count: {self.chat_usage[key]['count']}/20)")
+                    return key
+                self.chat_index = (self.chat_index + 1) % len(self.chat_keys)
+            
+            # All keys exhausted
+            return None
+    
+    def _get_image_key(self):
+        """Get available image key with usage tracking"""
+        with self._lock:
+            today = datetime.now().date()
+            
+            # Reset counts for new day
+            for key in self.image_usage:
+                if self.image_usage[key]["day"] != today:
+                    self.image_usage[key]["count"] = 0
+                    self.image_usage[key]["day"] = today
+            
+            # Find available key
+            for _ in range(len(self.image_keys)):
+                key = self.image_keys[self.image_index]
+                if self.image_usage[key]["count"] < 20:
+                    self.image_usage[key]["count"] += 1
+                    self.image_index = (self.image_index + 1) % len(self.image_keys)
+                    print(f"Using image key {key[:10]}... (count: {self.image_usage[key]['count']}/20)")
+                    return key
+                self.image_index = (self.image_index + 1) % len(self.image_keys)
+            
+            # All keys exhausted
+            return None
+    
+    def _get_chat_client(self, key):
+        """Get or create chat client for specific key"""
+        if key not in self._chat_clients:
+            self._chat_clients[key] = genai.Client(api_key=key)
+        return self._chat_clients[key]
+    
+    def _get_image_client(self, key):
+        """Get or create image client for specific key"""
+        if key not in self._image_clients:
+            self._image_clients[key] = genai.Client(api_key=key)
+        return self._image_clients[key]
 
     def generate_text(self, messages_payload):
-        """Handles core text generation using the Gemini 3.7 Flash model."""
+        """Handles core text generation with automatic key rotation"""
+        # Get available chat key
+        chat_key = self._get_chat_key()
+        
+        if chat_key is None:
+            # All chat keys exhausted - raise error for router to handle
+            raise Exception("All chat keys exhausted. Ruby needs rest.")
+        
         try:
-            # Convert simple dictionary format to contents structure if needed
-            response = self.client.models.generate_content(
+            client = self._get_chat_client(chat_key)
+            response = client.models.generate_content(
                 model="gemini-3.7-flash",
                 contents=messages_payload
             )
             return response.text
         except Exception as e:
-            print(f"Text Gen Error: {e}")
+            # If this key is rate limited, mark it as exhausted and retry
+            if "429" in str(e) or "quota" in str(e).lower():
+                with self._lock:
+                    # Mark this key as exhausted for today
+                    if chat_key in self.chat_usage:
+                        self.chat_usage[chat_key]["count"] = 20  # Force exhaustion
+                
+                # Try with next key
+                return self.generate_text(messages_payload)
             raise e
 
     def generate_image(self, prompt_text: str) -> str:
-        """Handles image generation using the correct Imagen client endpoint with raw phone-camera styling."""
+        """Handles image generation with automatic key rotation"""
+        # Get available image key
+        image_key = self._get_image_key()
+        
+        if image_key is None:
+            # All image keys exhausted
+            print("All image keys exhausted.")
+            return None
+        
         try:
             phone_camera_prompt = (
                 "Raw unfiltered smartphone photo, taken on a phone front camera, "
@@ -32,12 +152,14 @@ class RubyBrainCore:
                 f"no studio lighting, {prompt_text}"
             )
             
-            result = self.client.models.generate_images(
+            client = self._get_image_client(image_key)
+            
+            result = client.models.generate_images(
                 model="imagen-3.0-generate-002",
                 prompt=phone_camera_prompt,
                 config=types.GenerateImagesConfig(
                     number_of_images=1,
-                    aspect_ratio="9:16",  # Optimized for vertical mobile screens
+                    aspect_ratio="9:16",
                     output_mime_type="image/png"
                 )
             )
@@ -48,12 +170,22 @@ class RubyBrainCore:
                 with open(file_name, "wb") as f:
                     f.write(image_bytes)
                 return file_name
+                
         except Exception as e:
+            # If this key is rate limited, mark it as exhausted
+            if "429" in str(e) or "quota" in str(e).lower():
+                with self._lock:
+                    if image_key in self.image_usage:
+                        self.image_usage[image_key]["count"] = 20
+                
+                # Try with next key
+                return self.generate_image(prompt_text)
+            
             print(f"Image Gen Error: {e}")
-        return None
+            return None
 
     def generate_video(self, prompt_text: str) -> str:
-        """Handles video generation with shaky, unfiltered smartphone camera framing."""
+        """Handles video generation (placeholder)"""
         try:
             phone_video_prompt = (
                 "Raw smartphone video recording, handheld phone camera view, "
@@ -65,4 +197,34 @@ class RubyBrainCore:
             return None
         except Exception as e:
             print(f"Video Gen Error: {e}")
-        return None
+            return None
+    
+    def get_usage_stats(self):
+        """Get current usage statistics"""
+        chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
+        image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
+        
+        return {
+            "chat_keys": len(self.chat_keys),
+            "image_keys": len(self.image_keys),
+            "chat_used": chat_used,
+            "chat_limit": len(self.chat_keys) * 20,
+            "image_used": image_used,
+            "image_limit": len(self.image_keys) * 20,
+            "total_used": chat_used + image_used,
+            "total_limit": (len(self.chat_keys) + len(self.image_keys)) * 20,
+            "remaining": (len(self.chat_keys) + len(self.image_keys)) * 20 - (chat_used + image_used)
+        }
+    
+    def reset_keys(self):
+        """Reset all key usage (called when Ruby wakes up)"""
+        today = datetime.now().date()
+        with self._lock:
+            for key in self.chat_usage:
+                self.chat_usage[key]["count"] = 0
+                self.chat_usage[key]["day"] = today
+            for key in self.image_usage:
+                self.image_usage[key]["count"] = 0
+                self.image_usage[key]["day"] = today
+        
+        print("All keys reset! Ruby is refreshed.")
