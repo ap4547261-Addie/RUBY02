@@ -1,6 +1,8 @@
-# tools/instagram_connector.py - NEW FILE
+# tools/instagram_connector.py
 import os
 import json
+import random
+import sqlite3
 import threading
 import time
 from datetime import datetime
@@ -19,7 +21,7 @@ class InstagramConnector:
         
         # Instagram URLs
         self.INSTAGRAM_URL = "https://www.instagram.com"
-        self.PROFILE_URL = "https://www.instagram.com/ruby_genius/"  # Ruby's profile
+        self.PROFILE_URL = "https://www.instagram.com/ruby_genius/"
         
         # Track stats
         self.stats = {
@@ -35,18 +37,15 @@ class InstagramConnector:
     def connect(self, username: str = None, password: str = None):
         """Connect Ruby to Instagram"""
         try:
-            # Check if already logged in via browser profile
             result = self.browser.browse_social(
                 self.INSTAGRAM_URL,
                 action_type="read"
             )
             
-            # Check if we got Instagram content
             if "instagram" in result.lower() or "login" not in result.lower():
                 self.connected = True
                 self.last_sync = datetime.now()
                 
-                # Store connection in memory
                 self.memory.save_hybrid_memory(
                     f"Ruby connected to Instagram on {datetime.now().strftime('%B %d, %Y')}",
                     importance=3,
@@ -68,15 +67,11 @@ class InstagramConnector:
                 action_type="read"
             )
             
-            # Extract profile data
-            # Parse followers count from page
             if "followers" in result:
-                # Simple extraction - can be improved with better parsing
                 lines = result.split('\n')
                 for line in lines:
                     if 'followers' in line.lower():
                         try:
-                            # Extract number
                             import re
                             numbers = re.findall(r'\d+', line)
                             if numbers:
@@ -92,7 +87,6 @@ class InstagramConnector:
                         except:
                             pass
             
-            # Store in memory
             self.memory.save_hybrid_memory(
                 f"Ruby's Instagram: {self.stats['followers']} followers, {self.stats['posts']} posts",
                 importance=2,
@@ -107,27 +101,20 @@ class InstagramConnector:
     def get_recent_comments(self, limit: int = 20):
         """Get recent comments from Ruby's Instagram posts"""
         try:
-            # Go to recent post
-            post_url = f"{self.PROFILE_URL}p/random_post_id/"  # Would need actual post ID
-            
-            # Read page content
             result = self.browser.browse_social(
                 self.PROFILE_URL,
                 action_type="read"
             )
             
-            # Extract comments from page
             comments = []
             lines = result.split('\n')
             
-            for i, line in enumerate(lines):
+            for line in lines:
                 if '@' in line and 'comment' in line.lower():
-                    # Simple extraction - can be improved
                     comment = line.strip()
                     if comment and len(comment) < 200:
                         comments.append(comment)
             
-            # Store in memory
             for comment in comments[:limit]:
                 self.memory.save_hybrid_memory(
                     f"Instagram comment: {comment}",
@@ -143,9 +130,6 @@ class InstagramConnector:
     def post_content(self, image_path: str, caption: str):
         """Post content to Instagram"""
         try:
-            # This would require Instagram's API or more advanced automation
-            # For now, just store the post idea
-            
             self.memory.save_hybrid_memory(
                 f"Ruby posted: {caption[:50]}... with image {image_path}",
                 importance=3,
@@ -161,10 +145,8 @@ class InstagramConnector:
     def interact_with_followers(self, comment: str, username: str = "follower"):
         """Respond to follower comments"""
         try:
-            # Generate Ruby's response
             response = self._generate_response(comment)
             
-            # Store interaction
             self.memory.save_hybrid_memory(
                 f"Ruby replied to {username}: {response[:50]}...",
                 importance=2,
@@ -180,7 +162,6 @@ class InstagramConnector:
         """Generate Ruby's natural response to comments"""
         comment_lower = comment.lower()
         
-        # Ruby's natural responses
         if any(word in comment_lower for word in ["love", "like", "cute", "pretty", "gorgeous"]):
             return random.choice([
                 "aww thank you! 💕 you're so sweet!",
@@ -213,7 +194,6 @@ class InstagramConnector:
                 "welcome to Ruby's world! 🌎✨"
             ])
         
-        # Default responses
         return random.choice([
             "omg hey! 😊 thanks for the comment!",
             "hi! 💕 you're so sweet for commenting!",
@@ -223,8 +203,6 @@ class InstagramConnector:
     
     def analyze_engagement(self) -> dict:
         """Analyze Instagram engagement patterns"""
-        # Get comments from memory
-        comments = []
         conn = sqlite3.connect(self.memory.sqlite_path)
         cursor = conn.cursor()
         cursor.execute("""
@@ -241,7 +219,6 @@ class InstagramConnector:
         if not comments:
             return {"message": "No comments yet"}
         
-        # Analyze patterns
         analysis = {
             "total_comments": len(comments),
             "positive_comments": 0,
@@ -262,7 +239,6 @@ class InstagramConnector:
         if analysis["total_comments"] > 0:
             analysis["engagement_rate"] = (analysis["positive_comments"] / analysis["total_comments"]) * 100
         
-        # Store analysis in memory
         self.memory.save_hybrid_memory(
             f"Instagram engagement: {analysis['engagement_rate']:.1f}% positive",
             importance=2,
@@ -273,16 +249,10 @@ class InstagramConnector:
     
     def learn_from_instagram(self):
         """Main learning loop - what Ruby learns from Instagram"""
-        # Get profile data
         profile = self.get_profile_data()
-        
-        # Get recent comments
         comments = self.get_recent_comments()
-        
-        # Analyze engagement
         analysis = self.analyze_engagement()
         
-        # Generate insights
         insights = []
         
         if analysis.get("engagement_rate", 0) > 50:
@@ -298,7 +268,6 @@ class InstagramConnector:
         if analysis.get("collab_requests", 0) > 2:
             insights.append("Collaboration requests coming in! Ruby should consider collabs.")
         
-        # Store insights in memory
         for insight in insights:
             self.memory.save_hybrid_memory(
                 f"Instagram insight: {insight}",
@@ -310,8 +279,6 @@ class InstagramConnector:
     
     def generate_post_idea(self) -> str:
         """Generate post ideas from Instagram learnings"""
-        # Get insights from memory
-        insights = []
         conn = sqlite3.connect(self.memory.sqlite_path)
         cursor = conn.cursor()
         cursor.execute("""
@@ -325,7 +292,6 @@ class InstagramConnector:
         
         insights = [row[0] for row in rows]
         
-        # Generate ideas
         ideas = [
             "Daily outfit vibe! What do you think? 💕",
             "Ruby's mood today: ✨💅 vibes only!",
@@ -337,20 +303,17 @@ class InstagramConnector:
             "Ruby's fashion tips for the week! 💅"
         ]
         
-        # Use insights to generate better ideas
         if "Q&A" in str(insights):
             ideas.append("Ruby's Q&A session! Ask me anything! 💕")
         if "collab" in str(insights):
             ideas.append("Collab announcement coming soon! 👀")
         
-        import random
         return random.choice(ideas)
     
     def sync_data(self):
         """Sync all Instagram data to local memory"""
         self.last_sync = datetime.now()
         
-        # Update stats
         self.get_profile_data()
         self.learn_from_instagram()
         
@@ -362,7 +325,3 @@ class InstagramConnector:
         
         print(f"📸 Instagram synced! Followers: {self.stats['followers']}")
         return self.stats
-
-# Add random for responses
-import random
-import sqlite3
