@@ -1,14 +1,25 @@
+# engine/engine.py
+import os
 from datetime import datetime
+from engine.vector_store import HybridMemorySystem
+from engine.router import BrainRouter
+from engine.brain import RubyBrainCore
+from personality.ruby import RUBY_PROMPT
+
 
 class RubyEngine:
-
     def __init__(self, memory=None, knowledge=None, tools=None, router=None, brain_core=None, personality=None):
+        # Initialize modular subsystems
         self.memory = memory if memory is not None else HybridMemorySystem()
-        self.knowledge = knowledge if knowledge is not None else KnowledgeEngine()
-        self.tools = tools if tools is not None else ToolEngine()
+        self.knowledge = knowledge  # DataIngestion
+        self.tools = tools  # Your tools
         self.router = router if router is not None else BrainRouter()
         self.brain_core = brain_core if brain_core is not None else RubyBrainCore()
+        
+        # Fallback to RUBY_PROMPT if no custom personality string is passed
         self.personality = personality if personality is not None else RUBY_PROMPT
+        
+        print("🧠 RubyEngine initialized!")
 
     def think(self, user_message):
         # 1. Fetch current stats and increment message depth
@@ -48,7 +59,7 @@ class RubyEngine:
         router_result = self.router.route_request(messages, personality=current_personality)
         response_text = router_result.get("response", "")
 
-        # 7. Check for media generation tags and format them to look like phone camera shots
+        # 7. Check for media generation tags and format them
         response_text = self._process_media_tags(response_text)
 
         # 8. Post-process tags (like [SAVE_MEMORY:...]) and wrap up
@@ -57,15 +68,13 @@ class RubyEngine:
         return response_text
 
     def _process_media_tags(self, response_text: str) -> str:
-        """Scans response for image/video tags, applies phone-camera realism filters, and calls brain_core."""
-        # Example handling for [GENERATE_IMAGE: ...]
+        """Scans response for image/video tags, applies phone-camera realism filters."""
         if "[GENERATE_IMAGE:" in response_text:
             try:
                 start = response_text.index("[GENERATE_IMAGE:") + len("[GENERATE_IMAGE:")
                 end = response_text.index("]", start)
                 raw_prompt = response_text[start:end].strip()
                 
-                # Enforce raw smartphone aesthetics to strip the AI look
                 phone_camera_prompt = (
                     "Raw unfiltered smartphone photo, taken on a phone front camera, "
                     "natural skin texture with visible pores, casual everyday lighting, "
@@ -73,10 +82,10 @@ class RubyEngine:
                     f"no studio lighting, {raw_prompt}"
                 )
                 
-                # Trigger actual generation via brain_core
                 image_path = self.brain_core.generate_image(phone_camera_prompt)
                 if image_path:
                     response_text += f"\n[Image Generated: {image_path}]"
+                    print(f"📸 Image generated: {image_path}")
             except Exception as e:
                 print(f"Media tag processing error: {e}")
                 
