@@ -11,12 +11,24 @@ from engine.router import BrainRouter
 from engine.brain import RubyBrainCore
 from engine.vector_store import HybridMemorySystem
 from tools.browser import BrowserToolServer
+from tools.data_ingestion import DataIngestion
+from tools.web_learner import WebLearner
+from tools.video_learner import VideoLearner
+from tools.instagram_connector import InstagramConnector
+from tools.websocket_handler import WebSocketHandler
+from tools.websocket_server import RubyWebSocketServer
 
-# Initialize Clients & Core Brain Modules
+# ============================================
+# 1. INITIALIZE CORE BRAIN MODULES
+# ============================================
+
 router = BrainRouter(cloud_api_key=getattr(config, "GEMINI_API_KEY", None))
 brain_core = RubyBrainCore(api_key=getattr(config, "GEMINI_API_KEY", None))
 
-# Initialize Hybrid Memory System (Local-Only)
+# ============================================
+# 2. INITIALIZE LOCAL MEMORY SYSTEM
+# ============================================
+
 hybrid_memory = HybridMemorySystem(
     sqlite_path="ruby_memory.db",
     pinecone_api_key=None,  # Force local-only mode
@@ -26,7 +38,71 @@ hybrid_memory = HybridMemorySystem(
 PINECONE_API_KEY = getattr(config, "PINECONE_API_KEY", "")
 PINECONE_INDEX_HOST = getattr(config, "PINECONE_INDEX_HOST", "")
 
-# Persistent Storage Setup for Chat History
+# ============================================
+# 3. INITIALIZE LEARNING SYSTEMS (LOCAL-ONLY)
+# ============================================
+
+# DataIngestion - Local knowledge base
+data_ingestion = DataIngestion(db_path="ruby_knowledge.db")
+print("📚 DataIngestion initialized (0 API calls)")
+
+# WebLearner - Learn from web pages
+web_learner = WebLearner(data_ingestion)
+print("🌐 WebLearner initialized (0 API calls)")
+
+# VideoLearner - Learn from YouTube
+video_learner = VideoLearner(data_ingestion)
+print("🎬 VideoLearner initialized (0 API calls)")
+
+# Instagram Connector - Learn from Instagram
+instagram_connector = InstagramConnector(
+    hybrid_memory,
+    data_dir=os.path.join(os.getenv("FLET_APP_STORAGE_DATA", "."), "instagram_data")
+)
+print("📸 Instagram Connector initialized (0 API calls)")
+
+# ============================================
+# 4. INITIALIZE WEBSOCKET SERVER
+# ============================================
+
+# WebSocket Handler - Routes incoming data
+websocket_handler = WebSocketHandler(
+    hybrid_memory,
+    data_ingestion,
+    web_learner,
+    video_learner,
+    instagram_connector
+)
+print("🔌 WebSocketHandler initialized")
+
+# WebSocket Server - Listens for browser extension
+def start_websocket_server():
+    """Start Ruby's WebSocket server with handler"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    server = RubyWebSocketServer(
+        handler=websocket_handler,
+        host="localhost",
+        port=8765
+    )
+    
+    try:
+        loop.run_until_complete(server.start_server())
+    except Exception as e:
+        print(f"WebSocket server error: {e}")
+    finally:
+        loop.close()
+
+# Start WebSocket server in background thread
+ws_thread = threading.Thread(target=start_websocket_server, daemon=True)
+ws_thread.start()
+print("🔌 WebSocket server running on ws://localhost:8765")
+
+# ============================================
+# 5. PERSISTENT STORAGE - CHAT HISTORY
+# ============================================
+
 STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
 HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 
@@ -45,6 +121,10 @@ def save_chat_history():
             json.dump(conversation_history, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"Failed to save history: {e}")
+
+# ============================================
+# 6. RUBY'S PERSONALITY PROMPT
+# ============================================
 
 # Dynamically calculate her current age
 today = datetime.now()
@@ -104,9 +184,17 @@ RUBY_PROMPT = build_ruby_prompt(interaction_depth=0)
 
 conversation_history = []
 
+# ============================================
+# 7. UI STATE
+# ============================================
+
 ui_page_ref = None
 chat_list_ref = None
 status_label_ref = None
+
+# ============================================
+# 8. UI FUNCTIONS
+# ============================================
 
 def update_ruby_status():
     """Update Ruby's status display with her current energy and mood"""
@@ -156,6 +244,37 @@ def add_message(sender, text, is_user=False, image_path=None):
         )  
         chat_list_ref.controls.append(bubble)  
         ui_page_ref.update()
+
+# ============================================
+# 9. WEB SEARCH AND LEARNING
+# ============================================
+
+def search_and_learn(query: str) -> str:
+    """Search the web and learn from results - 0 API calls"""
+    try:
+        # Search web
+        from tools.web_learner import WebLearner
+        web_learner_local = WebLearner(data_ingestion)
+        result = web_learner_local.search_web_and_learn(query)
+        
+        if result.get("success"):
+            # Get knowledge from local DB
+            knowledge = data_ingestion.search_knowledge(query, limit=3)
+            if knowledge:
+                response = f"📚 I learned about '{query}' from the web!\n\n"
+                for item in knowledge[:3]:
+                    response += f"• {item['text'][:200]}...\n"
+                return response
+            else:
+                return f"🔍 I searched for '{query}' but need to process the results. Ask me again in a moment!"
+        else:
+            return f"🤔 I couldn't find much about '{query}'. Try a different topic!"
+    except Exception as e:
+        return f"❌ Search error: {str(e)}"
+
+# ============================================
+# 10. MAIN UI
+# ============================================
 
 def main_app_ui(page: ft.Page):
     global ui_page_ref, chat_list_ref, conversation_history, status_label_ref
@@ -210,20 +329,17 @@ def main_app_ui(page: ft.Page):
         try:
             # Check if Ruby is available
             if not router.energy.is_available():
-                # Ruby is sleeping
                 if router.energy.is_sleeping:
                     if router.energy.sleep_until and datetime.now() < router.energy.sleep_until:
                         add_message("Ruby", "I'm sleeping... Talk to me tomorrow! 💤")
                         return
                     else:
-                        # Just woke up!
                         router.energy._wake_up()
                         wake_msg = router.energy.get_wake_message()
                         add_message("Ruby", f"{wake_msg}\n\nWhat did I miss?")
                         update_ruby_status()
                         return
                 
-                # If still not available, go to sleep
                 if not router.energy.is_available():
                     router.energy._go_to_sleep()
                     add_message("Ruby", router.energy.get_sleep_message())
@@ -231,6 +347,33 @@ def main_app_ui(page: ft.Page):
                     return
 
             current_depth = hybrid_memory.increment_interaction()
+            
+            # Check if this is a search/learn request
+            learn_keywords = ["learn about", "search for", "find out", "look up", "research", "teach me about"]
+            is_learn_request = any(keyword in text.lower() for keyword in learn_keywords)
+            
+            if is_learn_request:
+                # Extract topic
+                topic = text
+                for keyword in learn_keywords:
+                    topic = topic.replace(keyword, "").strip()
+                
+                if topic:
+                    # Show Ruby is thinking
+                    add_message("Ruby", f"🔍 Let me learn about '{topic}'...")
+                    page.update()
+                    
+                    # Search and learn
+                    response = search_and_learn(topic)
+                    add_message("Ruby", response)
+                    
+                    # Update conversation history
+                    conversation_history.append({"role": "user", "content": text})
+                    conversation_history.append({"role": "assistant", "content": response})
+                    save_chat_history()
+                    return
+            
+            # Normal conversation flow
             current_memories = hybrid_memory.search_memories(text)
             
             system_payload = (
@@ -246,7 +389,7 @@ def main_app_ui(page: ft.Page):
             routed_result = router.route_request(messages_payload, use_cloud_preferred=True)
             reply = routed_result["response"]
             
-            # Check if Ruby went to sleep during the response
+            # Check if Ruby went to sleep
             if router.energy.is_sleeping:
                 add_message("Ruby", reply)
                 add_message("Ruby", f"\n💤 {router.energy.get_sleep_message()}")
@@ -255,8 +398,6 @@ def main_app_ui(page: ft.Page):
 
             conversation_history.append({"role": "user", "content": text})
             conversation_history.append({"role": "assistant", "content": reply})
-            
-            # Persist changes to local storage
             save_chat_history()
 
             if "[SAVE_MEMORY:" in reply:  
@@ -274,6 +415,7 @@ def main_app_ui(page: ft.Page):
                 reply = clean_reply
                 
                 add_message("Ruby", "Hold on, sketching this out...")
+                page.update()
                 
                 phone_camera_prompt = (
                     "Raw unfiltered smartphone photo, taken on a phone front camera, "
@@ -285,11 +427,8 @@ def main_app_ui(page: ft.Page):
                 generated_img_path = brain_core.generate_image(phone_camera_prompt)
 
             add_message("Ruby", reply, image_path=generated_img_path)
-            
-            # Update Ruby's status after interaction
             update_ruby_status()
             
-            # Check if Ruby is getting tired
             status = router.energy.get_energy_status()
             if status.get("energy", 100) < 20:
                 add_message("Ruby", "\nUgh, I'm getting really tired... Might need to sleep soon. 😴")
@@ -319,7 +458,6 @@ def main_app_ui(page: ft.Page):
 
     input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)  
 
-    # Header with status
     header = ft.Container(  
         content=ft.Row([
             ft.Text("RUBY // GENIUS HUMAN CORE", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
@@ -336,22 +474,24 @@ def main_app_ui(page: ft.Page):
         ], expand=True)  
     )
     
-    # Update status on startup
     update_ruby_status()
     page.update()
 
-def start_background_websocket():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    async def handle_incoming_browser_data(platform, content):
-        print(f"[WebSocket Bridge] Received content from {platform}: {content[:100]}...")
-
-    server = BrowserToolServer(host="localhost", port=8765, on_message_callback=handle_incoming_browser_data)
-    loop.run_until_complete(server.start_server())
+# ============================================
+# 11. STARTUP
+# ============================================
 
 if __name__ == "__main__":
-    ws_thread = threading.Thread(target=start_background_websocket, daemon=True)
-    ws_thread.start()
-
+    print("=" * 50)
+    print("🧠 RUBY'S BRAIN - COMPLETE SYSTEM")
+    print("=" * 50)
+    print(f"📚 Memory DB: ruby_memory.db")
+    print(f"📖 Knowledge DB: ruby_knowledge.db")
+    print(f"🔌 WebSocket: ws://localhost:8765")
+    print(f"📸 Instagram Data: instagram_data/")
+    print("=" * 50)
+    print("✅ All systems initialized (0 API calls for learning)")
+    print("📡 Waiting for browser extension connection...")
+    print("=" * 50)
+    
     ft.app(target=main_app_ui)
