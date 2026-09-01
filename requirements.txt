@@ -1,5 +1,28 @@
-flet>=0.25.0
-google-genai
-requests
-beautifulsoup4
-websockets
+# flet
+import flet as ft
+
+# google-genai
+from google import genai
+from google.genai import types
+
+# requests
+import requests
+
+# beautifulsoup4
+from bs4 import BeautifulSoup
+
+# websockets
+import websockets
+
+# playwright (optional)
+from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
+
+# Built-in (no installation needed)
+import os, sys, json, re, time, sqlite3
+import threading, asyncio, subprocess
+import hashlib, random, socket, shutil
+from datetime import datetime, timedelta
+from collections import deque
+import urllib.request, urllib.parse, urllib.error
+from html.parser import HTMLParser
