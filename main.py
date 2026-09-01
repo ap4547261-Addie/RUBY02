@@ -14,7 +14,7 @@ from tools.browser import BrowserToolServer
 from tools.data_ingestion import DataIngestion
 from tools.web_learner import WebLearner
 from tools.video_learner import VideoLearner
-from tools.instagram_connector import instagramConnector
+from tools.Instagram_connector import InstagramConnector  
 from tools.websocket_handler import WebSocketHandler
 from tools.websocket_server import RubyWebSocketServer
 
