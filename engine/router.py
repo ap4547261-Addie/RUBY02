@@ -1,4 +1,4 @@
-# engine/router.py
+
 import os
 import urllib.request
 import urllib.error
@@ -35,17 +35,26 @@ class BrainRouter:
         use_cloud_preferred=True
     ):
         if use_cloud_preferred and self.cloud_api_key:
+
             max_retries = 3
             backoff_delay = 3
 
             for attempt in range(max_retries):
                 try:
+                    print("========== GEMINI REQUEST ==========")
+                    print(f"Attempt: {attempt + 1}")
+                    print("====================================")
+
                     response = self._call_cloud(
                         messages,
                         personality
                     )
 
                     if response:
+                        print("========== GEMINI SUCCESS ==========")
+                        print(f"Attempt: {attempt + 1}")
+                        print("====================================")
+
                         return {
                             "source": "cloud",
                             "response": response
@@ -59,10 +68,15 @@ class BrainRouter:
                     except Exception:
                         error_message = str(e)
 
+                    print("========== GEMINI HTTP ERROR ==========")
+                    print(f"Status: {status_code}")
+                    print(error_message)
+                    print("========================================")
+
                     # Never retry quota exhaustion.
                     if status_code == 429:
                         print("========== GEMINI 429 ==========")
-                        print(error_message)
+                        print("429 received. No retry.")
                         print("================================")
 
                         return {
@@ -96,9 +110,12 @@ class BrainRouter:
                     http.client.RemoteDisconnected
                 ) as e:
 
+                    print("========== NETWORK ERROR ==========")
+                    print(str(e))
+                    print("====================================")
+
                     if attempt < max_retries - 1:
                         print(
-                            f"Connection problem: {e}. "
                             f"Retrying in {backoff_delay}s..."
                         )
 
@@ -112,10 +129,16 @@ class BrainRouter:
                     }
 
                 except Exception as e:
+                    print("========== UNEXPECTED ERROR ==========")
+                    print(str(e))
+                    print("======================================")
+
                     return {
                         "source": "cloud_error",
                         "response": f"Cloud Error: {e}"
                     }
+
+        print("========== USING LOCAL BRAIN ==========")
 
         return {
             "source": "local",
@@ -130,7 +153,7 @@ class BrainRouter:
             role = msg.get("role")
             content = msg.get("content", "")
 
-            # Properly extract system instructions.
+            # System instructions
             if role == "system":
                 if system_instruction:
                     system_instruction += "\n\n" + content
@@ -139,7 +162,11 @@ class BrainRouter:
 
                 continue
 
-            # Gemini accepts user/model conversation roles.
+            # Convert our stored assistant role to Gemini's model role.
+            if role == "assistant":
+                role = "model"
+
+            # Gemini accepts only user/model conversation roles.
             if role not in ("user", "model"):
                 continue
 
@@ -178,10 +205,14 @@ class BrainRouter:
             method="POST"
         )
 
+        print(">>> ACTUALLY CALLING GEMINI NOW")
+
         with urllib.request.urlopen(
             req,
             timeout=60
         ) as response:
+
+            print(">>> GEMINI HTTP RESPONSE RECEIVED")
 
             result = json.loads(
                 response.read().decode("utf-8")
