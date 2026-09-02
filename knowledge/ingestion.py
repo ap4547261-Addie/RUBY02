@@ -109,12 +109,12 @@ class DataIngestion:
         # Create a simple hash-based vector
         import hashlib
         vector = []
-        for word in list(word_set)[:100]:  # Limit to 100 words
+        for word in list(word_set)[:100]:
             hash_val = int(hashlib.md5(word.encode()).hexdigest(), 16) % 1000
             vector.append(hash_val / 1000.0)
         
         # Pad or truncate to fixed size
-        while len(vector) < 384:  # Standard embedding size
+        while len(vector) < 384:
             vector.append(0.0)
         
         return vector[:384]
@@ -157,20 +157,17 @@ class DataIngestion:
         for i, chunk in enumerate(chunks):
             chunk_id = f"{os.path.basename(file_path)}_chunk_{i}"
             
-            # Check if chunk already exists
             cursor.execute("SELECT id FROM knowledge_chunks WHERE chunk_id = ?", (chunk_id,))
             existing = cursor.fetchone()
             
             if not existing:
-                # Insert new chunk
                 cursor.execute("""
                     INSERT INTO knowledge_chunks (chunk_id, text, source_file, category)
                     VALUES (?, ?, ?, ?)
                 """, (chunk_id, chunk, file_path, category))
                 
-                # Extract and store keywords
                 words = set(chunk.lower().split())
-                for word in list(words)[:20]:  # Limit keywords
+                for word in list(words)[:20]:
                     if len(word) > 3:
                         cursor.execute("""
                             INSERT INTO keywords (keyword, chunk_id)
@@ -190,14 +187,13 @@ class DataIngestion:
         print(f"📚 Processed {len(chunks)} chunks from {file_path}")
         return processed_data
     
-    def search_knowledge(self, query: str, limit: int = 5) -> List[Dict]:
+    def search_knowledge(self, query: str, limit: int = None) -> List[Dict]:
         """
-        Search local knowledge - 0 API calls
+        Search local knowledge - 0 API calls - NO LIMIT
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Get keywords from query
         keywords = query.lower().split()
         keyword_conditions = []
         params = []
@@ -208,33 +204,26 @@ class DataIngestion:
                 params.append(kw)
         
         if keyword_conditions:
-            # Find chunks matching keywords
             sql = f"""
                 SELECT DISTINCT k.chunk_id, k.text, k.category, k.importance, k.access_count
                 FROM knowledge_chunks k
                 JOIN keywords kw ON k.chunk_id = kw.chunk_id
                 WHERE {' OR '.join(keyword_conditions)}
                 ORDER BY k.importance DESC, k.access_count DESC
-                LIMIT ?
             """
-            params.append(limit)
-            
             cursor.execute(sql, params)
             rows = cursor.fetchall()
         else:
-            # Fallback to text search
             cursor.execute("""
                 SELECT chunk_id, text, category, importance, access_count
                 FROM knowledge_chunks
                 WHERE text LIKE ?
                 ORDER BY importance DESC, access_count DESC
-                LIMIT ?
-            """, (f"%{query}%", limit))
+            """, (f"%{query}%",))
             rows = cursor.fetchall()
         
         results = []
         for chunk_id, text, category, importance, access_count in rows:
-            # Update access count
             cursor.execute("""
                 UPDATE knowledge_chunks 
                 SET access_count = access_count + 1, last_accessed = CURRENT_TIMESTAMP
@@ -272,7 +261,6 @@ class DataIngestion:
                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (chunk_id, chunk, category, importance))
             
-            # Extract keywords
             words = set(chunk.lower().split())
             for word in list(words)[:15]:
                 if len(word) > 3:
@@ -318,23 +306,19 @@ class DataIngestion:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Total chunks
         cursor.execute("SELECT COUNT(*) FROM knowledge_chunks")
         total_chunks = cursor.fetchone()[0]
         
-        # By category
         cursor.execute("""
             SELECT category, COUNT(*) FROM knowledge_chunks 
             GROUP BY category
         """)
         categories = cursor.fetchall()
         
-        # Most accessed
         cursor.execute("""
             SELECT chunk_id, text, access_count, category
             FROM knowledge_chunks
             ORDER BY access_count DESC
-            LIMIT 5
         """)
         most_accessed = cursor.fetchall()
         
