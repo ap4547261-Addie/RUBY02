@@ -1,4 +1,4 @@
-# tools/web_learner.py - NEW FILE
+# tools/web_learner.py
 import urllib.request
 import urllib.parse
 import json
@@ -90,7 +90,7 @@ class WebLearner:
                 # Store in database
                 self._store_web_content(url, title, clean_text)
                 
-                return clean_text[:5000]  # Return manageable snippet
+                return clean_text[:5000]
         except Exception as e:
             return f"Error fetching web content: {str(e)}"
     
@@ -130,7 +130,7 @@ class WebLearner:
             
             # Extract and store keywords
             words = set(content.lower().split())
-            for word in list(words)[:30]:  # Limit keywords
+            for word in list(words)[:30]:
                 if len(word) > 3:
                     cursor.execute("""
                         INSERT INTO web_keywords (keyword, content_id)
@@ -147,9 +147,9 @@ class WebLearner:
         conn.commit()
         conn.close()
     
-    def search_web_knowledge(self, query: str, limit: int = 5) -> List[Dict]:
+    def search_web_knowledge(self, query: str, limit: int = None) -> List[Dict]:
         """
-        Search web knowledge locally - 0 API calls
+        Search web knowledge locally - 0 API calls - NO LIMIT
         """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -174,10 +174,7 @@ class WebLearner:
                     JOIN web_sources ws ON wc.source_url = ws.url
                     WHERE {' OR '.join(keyword_conditions)}
                     ORDER BY wc.importance DESC, ws.access_count DESC
-                    LIMIT ?
                 """
-                params.append(limit)
-                
                 cursor.execute(sql, params)
                 rows = cursor.fetchall()
             else:
@@ -188,8 +185,7 @@ class WebLearner:
                     JOIN web_sources ws ON wc.source_url = ws.url
                     WHERE wc.content LIKE ?
                     ORDER BY wc.importance DESC, ws.access_count DESC
-                    LIMIT ?
-                """, (f"%{query}%", limit))
+                """, (f"%{query}%",))
                 rows = cursor.fetchall()
         else:
             # No keywords - return recent
@@ -198,8 +194,7 @@ class WebLearner:
                 FROM web_content wc
                 JOIN web_sources ws ON wc.source_url = ws.url
                 ORDER BY wc.created_at DESC
-                LIMIT ?
-            """, (limit,))
+            """)
             rows = cursor.fetchall()
         
         conn.close()
