@@ -169,8 +169,8 @@ class DataIngestion:
         print(f"📚 Processed {len(chunks)} chunks from {file_path}")
         return processed_data
     
-    def search_knowledge(self, query: str, limit: int = 5) -> List[Dict]:
-        """Search local knowledge - 0 API calls"""
+    def search_knowledge(self, query: str, limit: int = None) -> List[Dict]:
+        """Search local knowledge - 0 API calls - NO LIMIT"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -190,10 +190,7 @@ class DataIngestion:
                 JOIN keywords kw ON k.chunk_id = kw.chunk_id
                 WHERE {' OR '.join(keyword_conditions)}
                 ORDER BY k.importance DESC, k.access_count DESC
-                LIMIT ?
             """
-            params.append(limit)
-            
             cursor.execute(sql, params)
             rows = cursor.fetchall()
         else:
@@ -202,8 +199,7 @@ class DataIngestion:
                 FROM knowledge_chunks
                 WHERE text LIKE ?
                 ORDER BY importance DESC, access_count DESC
-                LIMIT ?
-            """, (f"%{query}%", limit))
+            """, (f"%{query}%",))
             rows = cursor.fetchall()
         
         results = []
@@ -295,7 +291,6 @@ class DataIngestion:
             SELECT chunk_id, text, access_count, category
             FROM knowledge_chunks
             ORDER BY access_count DESC
-            LIMIT 5
         """)
         most_accessed = cursor.fetchall()
         
