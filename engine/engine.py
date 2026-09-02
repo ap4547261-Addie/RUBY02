@@ -22,6 +22,9 @@ class RubyEngine:
         print("🧠 RubyEngine initialized!")
 
     def think(self, user_message):
+        """
+        Main thinking method - processes user message and generates response
+        """
         # 1. Fetch current stats and increment message depth
         current_state = self.memory.get_state()
         interaction_depth = current_state.get("interaction_depth", 0) + 1
@@ -68,7 +71,9 @@ class RubyEngine:
         return response_text
 
     def _process_media_tags(self, response_text: str) -> str:
-        """Scans response for image/video tags, applies phone-camera realism filters."""
+        """
+        Scans response for image/video tags, applies phone-camera realism filters.
+        """
         if "[GENERATE_IMAGE:" in response_text:
             try:
                 start = response_text.index("[GENERATE_IMAGE:") + len("[GENERATE_IMAGE:")
@@ -92,6 +97,9 @@ class RubyEngine:
         return response_text
 
     def _evaluate_emotion(self, message, state, depth):
+        """
+        Evaluates Ruby's emotional state based on interaction depth.
+        """
         if depth > 50:
             mood = "deeply attached, possessively greedy, and emotionally volatile"
         elif depth > 20:
@@ -103,3 +111,66 @@ class RubyEngine:
             "interaction_depth": depth,
             "mood": mood
         }
+
+    def learn_from_text(self, text: str, category: str = "general", importance: int = 1):
+        """
+        Allows Ruby to learn from new text directly.
+        """
+        if self.knowledge:
+            result = self.knowledge.learn_from_text(text, category, importance)
+            print(f"📚 Ruby learned from text: {text[:50]}...")
+            return result
+        else:
+            print("⚠️ No knowledge system available")
+            return None
+
+    def search_knowledge(self, query: str, limit: int = 5):
+        """
+        Search Ruby's knowledge base.
+        """
+        if self.knowledge:
+            return self.knowledge.search_knowledge(query, limit)
+        else:
+            return []
+
+    def get_status(self):
+        """
+        Get Ruby's current status including energy and mood.
+        """
+        status = {
+            "engine": "running",
+            "memory": "active",
+            "knowledge": "active" if self.knowledge else "inactive",
+            "tools": "active" if self.tools else "inactive",
+            "router": "active" if self.router else "inactive",
+            "brain_core": "active" if self.brain_core else "inactive",
+            "personality_loaded": bool(self.personality)
+        }
+        
+        # Add energy status if available
+        if self.router and hasattr(self.router, 'energy'):
+            energy_status = self.router.energy.get_energy_status()
+            status["energy"] = energy_status
+            status["sleeping"] = self.router.energy.is_sleeping
+            if self.router.energy.is_sleeping:
+                status["wake_at"] = self.router.energy.sleep_until
+        
+        return status
+
+    def force_wake(self):
+        """
+        Force Ruby to wake up (emergency use).
+        """
+        if self.router and hasattr(self.router, 'energy'):
+            self.router.energy._wake_up()
+            return "Ruby was forced awake!"
+        return "Router not available"
+
+    def force_sleep(self, hours: int = 8):
+        """
+        Force Ruby to sleep.
+        """
+        if self.router and hasattr(self.router, 'energy'):
+            self.router.energy._go_to_sleep()
+            return f"Ruby was forced to sleep for {hours} hours!"
+        return "Router not available"
