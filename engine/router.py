@@ -319,7 +319,7 @@ class BrainRouter:
                 last_user_msg = msg.get("content", "")
                 break
         
-        if not last_user_msg:
+        if not last_user_msg: or " "
             return "Hmm?"
         
         # Search local memory
