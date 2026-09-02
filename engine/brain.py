@@ -37,7 +37,7 @@ class RubyBrainCore:
         self._image_clients = {}
         self._lock = threading.Lock()
         
-        # Track key usage
+        # Track key usage (REQUIRED for API limits)
         self.chat_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.chat_keys}
         self.image_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.image_keys}
         
@@ -57,7 +57,7 @@ class RubyBrainCore:
                     self.chat_usage[key]["count"] = 0
                     self.chat_usage[key]["day"] = today
             
-            # Find available key
+            # Find available key (20 limit = Gemini API quota)
             for _ in range(len(self.chat_keys)):
                 key = self.chat_keys[self.chat_index]
                 if self.chat_usage[key]["count"] < 20:
@@ -81,7 +81,7 @@ class RubyBrainCore:
                     self.image_usage[key]["count"] = 0
                     self.image_usage[key]["day"] = today
             
-            # Find available key
+            # Find available key (20 limit = Gemini API quota)
             for _ in range(len(self.image_keys)):
                 key = self.image_keys[self.image_index]
                 if self.image_usage[key]["count"] < 20:
@@ -108,11 +108,9 @@ class RubyBrainCore:
 
     def generate_text(self, messages_payload):
         """Handles core text generation with automatic key rotation"""
-        # Get available chat key
         chat_key = self._get_chat_key()
         
         if chat_key is None:
-            # All chat keys exhausted - raise error for router to handle
             raise Exception("All chat keys exhausted. Ruby needs rest.")
         
         try:
@@ -123,24 +121,18 @@ class RubyBrainCore:
             )
             return response.text
         except Exception as e:
-            # If this key is rate limited, mark it as exhausted and retry
             if "429" in str(e) or "quota" in str(e).lower():
                 with self._lock:
-                    # Mark this key as exhausted for today
                     if chat_key in self.chat_usage:
-                        self.chat_usage[chat_key]["count"] = 20  # Force exhaustion
-                
-                # Try with next key
+                        self.chat_usage[chat_key]["count"] = 20
                 return self.generate_text(messages_payload)
             raise e
 
     def generate_image(self, prompt_text: str) -> str:
         """Handles image generation with automatic key rotation"""
-        # Get available image key
         image_key = self._get_image_key()
         
         if image_key is None:
-            # All image keys exhausted
             print("All image keys exhausted.")
             return None
         
@@ -172,13 +164,10 @@ class RubyBrainCore:
                 return file_name
                 
         except Exception as e:
-            # If this key is rate limited, mark it as exhausted
             if "429" in str(e) or "quota" in str(e).lower():
                 with self._lock:
                     if image_key in self.image_usage:
                         self.image_usage[image_key]["count"] = 20
-                
-                # Try with next key
                 return self.generate_image(prompt_text)
             
             print(f"Image Gen Error: {e}")
