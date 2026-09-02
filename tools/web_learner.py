@@ -128,8 +128,8 @@ class WebLearner:
         conn.commit()
         conn.close()
     
-    def search_web_knowledge(self, query: str, limit: int = 5) -> List[Dict]:
-        """Search web knowledge locally - 0 API calls"""
+    def search_web_knowledge(self, query: str, limit: int = None) -> List[Dict]:
+        """Search web knowledge locally - 0 API calls - NO LIMIT"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -152,10 +152,7 @@ class WebLearner:
                     JOIN web_sources ws ON wc.source_url = ws.url
                     WHERE {' OR '.join(keyword_conditions)}
                     ORDER BY wc.importance DESC, ws.access_count DESC
-                    LIMIT ?
                 """
-                params.append(limit)
-                
                 cursor.execute(sql, params)
                 rows = cursor.fetchall()
             else:
@@ -165,8 +162,7 @@ class WebLearner:
                     JOIN web_sources ws ON wc.source_url = ws.url
                     WHERE wc.content LIKE ?
                     ORDER BY wc.importance DESC, ws.access_count DESC
-                    LIMIT ?
-                """, (f"%{query}%", limit))
+                """, (f"%{query}%",))
                 rows = cursor.fetchall()
         else:
             cursor.execute("""
@@ -174,8 +170,7 @@ class WebLearner:
                 FROM web_content wc
                 JOIN web_sources ws ON wc.source_url = ws.url
                 ORDER BY wc.created_at DESC
-                LIMIT ?
-            """, (limit,))
+            """)
             rows = cursor.fetchall()
         
         conn.close()
@@ -212,7 +207,7 @@ class WebLearner:
         }
     
     def search_web_and_learn(self, topic: str) -> Dict:
-        """Search the web and learn about a topic - 0 API calls"""
+        """Search the web and learn about a topic - 0 API calls - NO LIMIT"""
         encoded_query = urllib.parse.quote_plus(topic)
         search_url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
         
