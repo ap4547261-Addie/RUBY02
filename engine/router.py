@@ -310,46 +310,38 @@ class BrainRouter:
             return False
 
     def _call_local_brain(self, messages, context=None):
-        """Ruby's local brain response - 0 API calls - Human-like memory and curiosity"""
-        from main import hybrid_memory
-        
-        last_user_msg = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                last_user_msg = msg.get("content", "")
-                break
-        
-        if not last_user_msg: or " "
-            return "Hmm?"
-        
-        # Search local memory
-        memories = hybrid_memory.search_memories(last_user_msg)
-        
-        # Check if user asked a question
-        if "?" in last_user_msg:
-            # Save the question to memory
-            hybrid_memory.save_hybrid_memory(
-                f"User asked: {last_user_msg}",
-                importance=3,
-                category="user_questions"
-            )
-        
-        # Random chance to ask a question back (makes her feel alive)
-        if random.random() < 0.3:  # 30% chance
-            # Get a previously asked question
-            questions = hybrid_memory.search_memories("User asked", limit=5)
-            if questions:
-                # Pick a random question
-                question = random.choice(questions)
-                # Clean it up
-                question = question.replace("User asked: ", "")
-                return f"Oh, by the way, you asked me before: {question} What's your answer? 😏"
-        
-        # Normal response
-        if memories:
-            return memories[0]
-        else:
-            return last_user_msg
+    from main import hybrid_memory
+    
+    last_user_msg = None
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            last_user_msg = msg.get("content", "")
+            break
+    
+    if not last_user_msg:
+        return " "
+    
+    memories = hybrid_memory.search_memories(last_user_msg)
+    
+    if "?" in last_user_msg:
+        hybrid_memory.save_hybrid_memory(
+            f"User asked: {last_user_msg}",
+            importance=3,
+            category="user_questions"
+        )
+    
+    # Ask a random question to ANYONE
+    if random.random() < 0.3:
+        questions = hybrid_memory.search_memories("User asked", limit=10)
+        if questions:
+            question = random.choice(questions)
+            question = question.replace("User asked: ", "")
+            return question  
+    
+    if memories:
+        return memories[0]
+    else:
+        return last_user_msg or " "
 
     def route_request(self, messages, personality=None, use_cloud_preferred=True):
         """Smart routing with Ruby's energy system and 9 keys"""
