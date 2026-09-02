@@ -75,7 +75,7 @@ class WebSocketHandler:
         )
     
     async def _handle_instagram_content(self, content: str, url: str = ""):
-        """Process Instagram content - 0 API calls"""
+        """Process Instagram content - 0 API calls - NO LIMIT"""
         print("📸 Processing Instagram content...")
         
         # Extract profile info
@@ -88,19 +88,19 @@ class WebSocketHandler:
                 category="instagram_profile"
             )
         
-        # Extract posts
+        # Extract posts - NO LIMIT
         posts = re.findall(r'Post \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, post in enumerate(posts[:5]):
+        for post in posts:
             if post.strip():
                 self.memory.save_hybrid_memory(
-                    f"Instagram post {i+1}: {post[:200]}",
+                    f"Instagram post: {post[:200]}",
                     importance=2,
                     category="instagram_posts"
                 )
         
-        # Extract comments
+        # Extract comments - NO LIMIT
         comments = re.findall(r'Comment \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, comment in enumerate(comments[:10]):
+        for comment in comments:
             if comment.strip():
                 self.memory.save_hybrid_memory(
                     f"Instagram comment: {comment[:200]}",
@@ -118,7 +118,7 @@ class WebSocketHandler:
         print(f"📸 Learned from Instagram: {len(posts)} posts, {len(comments)} comments")
     
     async def _handle_video_content(self, content: str, url: str = ""):
-        """Process YouTube/video content - 0 API calls"""
+        """Process YouTube/video content - 0 API calls - NO LIMIT"""
         print("🎬 Processing YouTube content...")
         
         # Extract video title
@@ -145,9 +145,9 @@ class WebSocketHandler:
                 category="video_channel"
             )
         
-        # Extract comments
+        # Extract comments - NO LIMIT
         comments = re.findall(r'Comment \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, comment in enumerate(comments[:10]):
+        for comment in comments:
             if comment.strip():
                 self.memory.save_hybrid_memory(
                     f"YouTube comment: {comment[:200]}",
@@ -165,12 +165,12 @@ class WebSocketHandler:
         print(f"🎬 Learned from YouTube: {len(comments)} comments")
     
     async def _handle_reddit_content(self, content: str, url: str = ""):
-        """Process Reddit content - 0 API calls"""
+        """Process Reddit content - 0 API calls - NO LIMIT"""
         print("📚 Processing Reddit content...")
         
-        # Extract posts
+        # Extract posts - NO LIMIT
         posts = re.findall(r'Post \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, post in enumerate(posts[:5]):
+        for post in posts:
             if post.strip():
                 self.memory.save_hybrid_memory(
                     f"Reddit post: {post[:200]}",
@@ -178,9 +178,9 @@ class WebSocketHandler:
                     category="reddit_posts"
                 )
         
-        # Extract comments
+        # Extract comments - NO LIMIT
         comments = re.findall(r'Comment \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, comment in enumerate(comments[:10]):
+        for comment in comments:
             if comment.strip():
                 self.memory.save_hybrid_memory(
                     f"Reddit comment: {comment[:200]}",
@@ -198,12 +198,12 @@ class WebSocketHandler:
         print(f"📚 Learned from Reddit: {len(posts)} posts, {len(comments)} comments")
     
     async def _handle_twitter_content(self, content: str, url: str = ""):
-        """Process Twitter/X content - 0 API calls"""
+        """Process Twitter/X content - 0 API calls - NO LIMIT"""
         print("🐦 Processing Twitter content...")
         
-        # Extract tweets
+        # Extract tweets - NO LIMIT
         tweets = re.findall(r'Tweet \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, tweet in enumerate(tweets[:5]):
+        for tweet in tweets:
             if tweet.strip():
                 self.memory.save_hybrid_memory(
                     f"Tweet: {tweet[:200]}",
@@ -221,12 +221,12 @@ class WebSocketHandler:
         print(f"🐦 Learned from Twitter: {len(tweets)} tweets")
     
     async def _handle_linkedin_content(self, content: str, url: str = ""):
-        """Process LinkedIn content - 0 API calls"""
+        """Process LinkedIn content - 0 API calls - NO LIMIT"""
         print("💼 Processing LinkedIn content...")
         
-        # Extract posts
+        # Extract posts - NO LIMIT
         posts = re.findall(r'Post \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, post in enumerate(posts[:5]):
+        for post in posts:
             if post.strip():
                 self.memory.save_hybrid_memory(
                     f"LinkedIn post: {post[:200]}",
@@ -244,12 +244,12 @@ class WebSocketHandler:
         print(f"💼 Learned from LinkedIn: {len(posts)} posts")
     
     async def _handle_facebook_content(self, content: str, url: str = ""):
-        """Process Facebook content - 0 API calls"""
+        """Process Facebook content - 0 API calls - NO LIMIT"""
         print("📘 Processing Facebook content...")
         
-        # Extract posts
+        # Extract posts - NO LIMIT
         posts = re.findall(r'Post \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, post in enumerate(posts[:5]):
+        for post in posts:
             if post.strip():
                 self.memory.save_hybrid_memory(
                     f"Facebook post: {post[:200]}",
@@ -267,12 +267,12 @@ class WebSocketHandler:
         print(f"📘 Learned from Facebook: {len(posts)} posts")
     
     async def _handle_tiktok_content(self, content: str, url: str = ""):
-        """Process TikTok content - 0 API calls"""
+        """Process TikTok content - 0 API calls - NO LIMIT"""
         print("🎵 Processing TikTok content...")
         
-        # Extract videos
+        # Extract videos - NO LIMIT
         videos = re.findall(r'Video \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, video in enumerate(videos[:5]):
+        for video in videos:
             if video.strip():
                 self.memory.save_hybrid_memory(
                     f"TikTok video: {video[:200]}",
@@ -280,9 +280,9 @@ class WebSocketHandler:
                     category="tiktok_videos"
                 )
         
-        # Extract comments
+        # Extract comments - NO LIMIT
         comments = re.findall(r'Comment \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, comment in enumerate(comments[:10]):
+        for comment in comments:
             if comment.strip():
                 self.memory.save_hybrid_memory(
                     f"TikTok comment: {comment[:200]}",
@@ -300,12 +300,12 @@ class WebSocketHandler:
         print(f"🎵 Learned from TikTok: {len(videos)} videos, {len(comments)} comments")
     
     async def _handle_pinterest_content(self, content: str, url: str = ""):
-        """Process Pinterest content - 0 API calls"""
+        """Process Pinterest content - 0 API calls - NO LIMIT"""
         print("📌 Processing Pinterest content...")
         
-        # Extract pins
+        # Extract pins - NO LIMIT
         pins = re.findall(r'Pin \d+:\s*(.+?)(?:\n|$)', content, re.IGNORECASE)
-        for i, pin in enumerate(pins[:5]):
+        for pin in pins:
             if pin.strip():
                 self.memory.save_hybrid_memory(
                     f"Pinterest pin: {pin[:200]}",
@@ -323,13 +323,13 @@ class WebSocketHandler:
         print(f"📌 Learned from Pinterest: {len(pins)} pins")
     
     async def _handle_search_content(self, content: str, url: str = ""):
-        """Process search results - 0 API calls"""
+        """Process search results - 0 API calls - NO LIMIT"""
         print("🔍 Processing search content...")
         
-        # Extract search results
+        # Extract search results - NO LIMIT
         results = re.findall(r'<a[^>]+href="([^"]+)"[^>]*>([^<]+)</a>', content)
         
-        for url, title in results[:5]:
+        for url, title in results:
             if 'youtube.com' in url:
                 if self.video_learner:
                     self.video_learner.get_video_metadata(url)
