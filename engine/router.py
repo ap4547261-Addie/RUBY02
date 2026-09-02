@@ -285,7 +285,7 @@ class BrainRouter:
             return False
 
     def _call_local_brain(self, messages, context=None):
-        """Ruby's local brain response - 0 API calls"""
+        """Ruby's local brain response - 0 API calls - Human-like memory and curiosity"""
         from main import hybrid_memory
         
         last_user_msg = None
@@ -295,12 +295,33 @@ class BrainRouter:
                 break
         
         if not last_user_msg:
+            # Ruby says something when she wants to
             return "Hmm?"
         
         # Search local memory
         memories = hybrid_memory.search_memories(last_user_msg)
         
-        # Return memory or echo user
+        # Check if user asked a question
+        if "?" in last_user_msg:
+            # Save the question to memory
+            hybrid_memory.save_hybrid_memory(
+                f"User asked: {last_user_msg}",
+                importance=3,
+                category="user_questions"
+            )
+        
+        # Random chance to ask a question back (makes her feel alive)
+        if random.random() < 0.3:  # 30% chance
+            # Get a previously asked question
+            questions = hybrid_memory.search_memories("User asked", limit=5)
+            if questions:
+                # Pick a random question
+                question = random.choice(questions)
+                # Clean it up
+                question = question.replace("User asked: ", "")
+                return f"Oh, by the way, you asked me before: {question} What's your answer? 😏"
+        
+        # Normal response
         if memories:
             return memories[0]
         else:
