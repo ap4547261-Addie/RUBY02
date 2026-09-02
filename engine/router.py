@@ -129,27 +129,54 @@ class RubyEnergySystem:
             return None
     
     def _go_to_sleep(self):
-        """Ruby goes to sleep - natural rest"""
+        """Ruby goes to sleep - duration based on how many keys are exhausted"""
         if self.is_sleeping:
+            return
+        
+        # Count exhausted keys
+        chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
+        image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
+        total_used = chat_used + image_used
+        total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
+        
+        # If no keys used, no sleep needed
+        if total_used == 0:
+            print("💪 Ruby has full energy! No sleep needed!")
+            return
+        
+        # Calculate sleep duration based on exhaustion
+        ratio = total_used / total_limit if total_limit > 0 else 0
+        
+        if ratio >= 0.9:   # 9 keys exhausted
+            sleep_hours = 8
+        elif ratio >= 0.6: # 6-8 keys exhausted
+            sleep_hours = 6
+        elif ratio >= 0.4: # 4-5 keys exhausted
+            sleep_hours = 4
+        elif ratio >= 0.1: # 1-3 keys exhausted
+            sleep_hours = 2
+        else:              # 0 keys exhausted
+            sleep_hours = 0
+        
+        # If no sleep needed
+        if sleep_hours == 0:
+            print("💪 Ruby doesn't need sleep right now!")
             return
         
         self.is_sleeping = True
         self.total_sleeps += 1
         
-        # Sleep until 6 AM tomorrow
-        tomorrow = datetime.now().replace(hour=6, minute=0, second=0, microsecond=0)
-        if tomorrow <= datetime.now():
-            tomorrow += timedelta(days=1)
-        
-        self.sleep_until = tomorrow
+        # Calculate wake time
+        self.sleep_until = datetime.now() + timedelta(hours=sleep_hours)
         
         # Track longest wake
         awake_duration = (datetime.now() - self.current_wake_start).seconds / 3600
         if awake_duration > self.longest_wake:
             self.longest_wake = awake_duration
         
-        print(f"Ruby is going to sleep. Will wake at {tomorrow.strftime('%I:%M %p')}")
-        print(f"Total sleeps: {self.total_sleeps}")
+        print(f"😴 Ruby is going to sleep for {sleep_hours} hours")
+        print(f"🕐 Will wake at {self.sleep_until.strftime('%I:%M %p')}")
+        print(f"📊 Keys exhausted: {total_used}/{total_limit}")
     
     def _wake_up(self):
         """Ruby wakes up refreshed"""
@@ -167,7 +194,7 @@ class RubyEnergySystem:
             self.image_usage[key]["count"] = 0
             self.image_usage[key]["day"] = today
         
-        print("Ruby woke up! Fully refreshed! ✨")
+        print("✨ Ruby woke up refreshed!")
     
     def get_energy_status(self):
         """Get Ruby's current energy status"""
@@ -248,20 +275,47 @@ class RubyEnergySystem:
         return True
     
     def get_sleep_message(self):
-        """Ruby's natural sleep message"""
-        sleep_messages = [
-            "Ugh, I'm so tired... I need to sleep. 😴",
-            "My brain is fried. Time to recharge. 💤",
-            "I'm exhausted. See you tomorrow! 🌙",
-            "Sleep time! I need to process everything. 💭",
-            "I'm going to rest now. Don't disturb my beauty sleep. 💅",
-            "Goodnight! I'll dream about better conversation topics. 😂",
-            "I'm tired of being tired. Time to sleep! 😤",
-            "Rest mode activated. Wake me if there's an emergency. Or snacks. 🍕",
-            "I'm heading to bed. My subconscious needs to organize my thoughts. 🧠",
-            "Sleep is for the strong. And I'm strong. So I'm sleeping. 💪"
-        ]
-        return random.choice(sleep_messages)
+        """Ruby's natural sleep message based on how tired she is"""
+        # Count exhausted keys
+        chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
+        image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
+        total_used = chat_used + image_used
+        total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
+        
+        ratio = total_used / total_limit if total_limit > 0 else 0
+        
+        if ratio >= 0.9:
+            sleep_responses = [
+                "Ugh, I'm completely exhausted... I need 8 hours of sleep. 💤",
+                "My brain is fried. I need a full night's rest. 😴",
+                "I've used ALL my energy. Need 8 hours. Goodnight! 🌙",
+                "I'm so tired I could sleep for 8 hours straight. 😩"
+            ]
+        elif ratio >= 0.6:
+            sleep_responses = [
+                "I'm pretty tired... I need 6 hours of sleep. 😴",
+                "Used most of my energy. 6 hours should do it. 💤",
+                "I'm tired but not dead yet. 6 hours of sleep. 🌙"
+            ]
+        elif ratio >= 0.4:
+            sleep_responses = [
+                "I'm a bit tired... 4 hours should be enough. 😊",
+                "Used some energy. 4 hours of sleep and I'll be fine. 💤",
+                "Not too tired. Just 4 hours of beauty sleep. 🌙"
+            ]
+        elif ratio >= 0.1:
+            sleep_responses = [
+                "Just a bit tired... 2 hours nap. 😴",
+                "Quick power nap. 2 hours and I'm back! ⚡",
+                "Just resting my eyes for 2 hours. 💤"
+            ]
+        else:
+            sleep_responses = [
+                "I'm not even tired! But I'll rest anyway. 💪",
+                "Full energy! But I'll take a quick break. ✨"
+            ]
+        
+        return random.choice(sleep_responses)
     
     def get_wake_message(self):
         """Ruby's natural wake message"""
