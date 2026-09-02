@@ -180,8 +180,8 @@ class VideoLearner:
             "learned": True
         }
     
-    def search_video_knowledge(self, query: str, limit: int = 5) -> List[Dict]:
-        """Search knowledge learned from videos - 0 API calls"""
+    def search_video_knowledge(self, query: str, limit: int = None) -> List[Dict]:
+        """Search knowledge learned from videos - 0 API calls - NO LIMIT"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -191,8 +191,7 @@ class VideoLearner:
             JOIN videos v ON vl.video_id = v.video_id
             WHERE vl.learning LIKE ? OR v.title LIKE ?
             ORDER BY vl.importance DESC, v.watch_count DESC
-            LIMIT ?
-        """, (f"%{query}%", f"%{query}%", limit))
+        """, (f"%{query}%", f"%{query}%"))
         
         rows = cursor.fetchall()
         conn.close()
@@ -209,8 +208,8 @@ class VideoLearner:
         
         return results
     
-    def get_watched_videos(self, limit: int = 10) -> List[Dict]:
-        """Get recently watched videos - 0 API calls"""
+    def get_watched_videos(self, limit: int = None) -> List[Dict]:
+        """Get recently watched videos - 0 API calls - NO LIMIT"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -219,8 +218,7 @@ class VideoLearner:
             FROM videos
             WHERE watched = 1
             ORDER BY last_watched DESC
-            LIMIT ?
-        """, (limit,))
+        """)
         
         rows = cursor.fetchall()
         conn.close()
@@ -260,7 +258,7 @@ class VideoLearner:
         }
     
     def learn_from_youtube_search(self, query: str) -> Dict:
-        """Search YouTube and learn from videos - 0 API calls"""
+        """Search YouTube and learn from videos - 0 API calls - NO LIMIT"""
         encoded_query = urllib.parse.quote_plus(f"site:youtube.com {query}")
         search_url = f"https://html.duckduckgo.com/html/?q={encoded_query}"
         
@@ -275,7 +273,7 @@ class VideoLearner:
                 video_links = list(dict.fromkeys(video_links))
                 
                 learned = 0
-                for link in video_links[:3]:
+                for link in video_links:  # ✅ NO LIMIT - Learn from ALL videos
                     result = self.learn_from_video(link, query)
                     if result.get("success"):
                         learned += 1
