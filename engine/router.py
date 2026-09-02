@@ -67,7 +67,6 @@ class RubyEnergySystem:
     def get_chat_key(self):
         """Get available chat key with automatic rotation"""
         with self.lock:
-            # Check if sleeping
             if self.is_sleeping:
                 if self.sleep_until and datetime.now() < self.sleep_until:
                     return None
@@ -76,13 +75,11 @@ class RubyEnergySystem:
             
             today = datetime.now().date()
             
-            # Reset counts for new day
             for key in self.chat_usage:
                 if self.chat_usage[key]["day"] != today:
                     self.chat_usage[key]["count"] = 0
                     self.chat_usage[key]["day"] = today
             
-            # Find available key
             for _ in range(len(self.chat_keys)):
                 key = self.chat_keys[self.chat_index]
                 if self.chat_usage[key]["count"] < 20:
@@ -92,14 +89,12 @@ class RubyEnergySystem:
                     return key
                 self.chat_index = (self.chat_index + 1) % len(self.chat_keys)
             
-            # All keys exhausted - Ruby goes to sleep
             self._go_to_sleep()
             return None
     
     def get_image_key(self):
         """Get available image key with automatic rotation"""
         with self.lock:
-            # Check if sleeping
             if self.is_sleeping:
                 if self.sleep_until and datetime.now() < self.sleep_until:
                     return None
@@ -108,13 +103,11 @@ class RubyEnergySystem:
             
             today = datetime.now().date()
             
-            # Reset counts for new day
             for key in self.image_usage:
                 if self.image_usage[key]["day"] != today:
                     self.image_usage[key]["count"] = 0
                     self.image_usage[key]["day"] = today
             
-            # Find available key
             for _ in range(len(self.image_keys)):
                 key = self.image_keys[self.image_index]
                 if self.image_usage[key]["count"] < 20:
@@ -124,7 +117,6 @@ class RubyEnergySystem:
                     return key
                 self.image_index = (self.image_index + 1) % len(self.image_keys)
             
-            # All keys exhausted - Ruby goes to sleep
             self._go_to_sleep()
             return None
     
@@ -133,43 +125,36 @@ class RubyEnergySystem:
         if self.is_sleeping:
             return
         
-        # Count exhausted keys
         chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
         image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
         total_used = chat_used + image_used
         total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
         
-        # If no keys used, no sleep needed
         if total_used == 0:
             print("💪 Ruby has full energy! No sleep needed!")
             return
         
-        # Calculate sleep duration based on exhaustion
         ratio = total_used / total_limit if total_limit > 0 else 0
         
-        if ratio >= 0.9:   # 9 keys exhausted
+        if ratio >= 0.9:
             sleep_hours = 8
-        elif ratio >= 0.6: # 6-8 keys exhausted
+        elif ratio >= 0.6:
             sleep_hours = 6
-        elif ratio >= 0.4: # 4-5 keys exhausted
+        elif ratio >= 0.4:
             sleep_hours = 4
-        elif ratio >= 0.1: # 1-3 keys exhausted
+        elif ratio >= 0.1:
             sleep_hours = 2
-        else:              # 0 keys exhausted
+        else:
             sleep_hours = 0
         
-        # If no sleep needed
         if sleep_hours == 0:
             print("💪 Ruby doesn't need sleep right now!")
             return
         
         self.is_sleeping = True
         self.total_sleeps += 1
-        
-        # Calculate wake time
         self.sleep_until = datetime.now() + timedelta(hours=sleep_hours)
         
-        # Track longest wake
         awake_duration = (datetime.now() - self.current_wake_start).seconds / 3600
         if awake_duration > self.longest_wake:
             self.longest_wake = awake_duration
@@ -185,7 +170,6 @@ class RubyEnergySystem:
         self.current_wake_start = datetime.now()
         self.energy = 100
         
-        # Reset all key counts for new day
         today = datetime.now().date()
         for key in self.chat_usage:
             self.chat_usage[key]["count"] = 0
@@ -217,14 +201,12 @@ class RubyEnergySystem:
                 "energy": self.energy
             }
         
-        # Calculate used keys
         chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
         image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
         total_used = chat_used + image_used
         total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
         energy_percent = max(0, 100 - (total_used / total_limit * 100))
         
-        # Ruby's mood based on energy
         if energy_percent > 70:
             status = "energetic"
             emoji = "✨"
@@ -262,7 +244,6 @@ class RubyEnergySystem:
                 return True
             return False
         
-        # Check if Ruby is too tired (all keys exhausted)
         chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
         image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
         total_used = chat_used + image_used
@@ -275,74 +256,21 @@ class RubyEnergySystem:
         return True
     
     def get_sleep_message(self):
-        """Ruby's natural sleep message based on how tired she is"""
-        # Count exhausted keys
-        chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
-        image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
-        total_used = chat_used + image_used
-        total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
-        
-        ratio = total_used / total_limit if total_limit > 0 else 0
-        
-        if ratio >= 0.9:
-            sleep_responses = [
-                "Ugh, I'm completely exhausted... I need 8 hours of sleep. 💤",
-                "My brain is fried. I need a full night's rest. 😴",
-                "I've used ALL my energy. Need 8 hours. Goodnight! 🌙",
-                "I'm so tired I could sleep for 8 hours straight. 😩"
-            ]
-        elif ratio >= 0.6:
-            sleep_responses = [
-                "I'm pretty tired... I need 6 hours of sleep. 😴",
-                "Used most of my energy. 6 hours should do it. 💤",
-                "I'm tired but not dead yet. 6 hours of sleep. 🌙"
-            ]
-        elif ratio >= 0.4:
-            sleep_responses = [
-                "I'm a bit tired... 4 hours should be enough. 😊",
-                "Used some energy. 4 hours of sleep and I'll be fine. 💤",
-                "Not too tired. Just 4 hours of beauty sleep. 🌙"
-            ]
-        elif ratio >= 0.1:
-            sleep_responses = [
-                "Just a bit tired... 2 hours nap. 😴",
-                "Quick power nap. 2 hours and I'm back! ⚡",
-                "Just resting my eyes for 2 hours. 💤"
-            ]
-        else:
-            sleep_responses = [
-                "I'm not even tired! But I'll rest anyway. 💪",
-                "Full energy! But I'll take a quick break. ✨"
-            ]
-        
-        return random.choice(sleep_responses)
+        """Ruby decides what to say when going to sleep - no pre-written responses"""
+        # Just let Ruby say what she wants naturally
+        return "Sleeping..."  # This will be overridden by _call_local_brain
     
     def get_wake_message(self):
-        """Ruby's natural wake message"""
-        wake_messages = [
-            "Good morning! I feel so refreshed! ☀️",
-            "I'm awake! I slept like a log. What did I miss? ✨",
-            "Morning! I had the weirdest dreams. But I feel great! 😊",
-            "Rise and shine! ...Ugh, morning. But I'm awake now. 🥱",
-            "I'm back! And I'm ready to chat. Did you miss me? 😏",
-            "Morning! My brain feels so clear now. 💡",
-            "I woke up feeling like a new person. 💅",
-            "Guess who's back? Ruby! And I'm fully charged! ⚡",
-            "Good morning! I processed everything while I slept. I'm ready! 🧠",
-            "I'm awake and I'm hungry. For conversation. And snacks. 🍕"
-        ]
-        return random.choice(wake_messages)
+        """Ruby decides what to say when waking up - no pre-written responses"""
+        # Just let Ruby say what she wants naturally
+        return "Waking up..."  # This will be overridden by _call_local_brain
 
 class BrainRouter:
     def __init__(self, cloud_api_key=None, local_model_path=None):
-        # Initialize energy system with all 9 keys
         self.energy = RubyEnergySystem()
         self.local_model_path = local_model_path
-        
-        # For backward compatibility
         self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
         
-        # If energy system has keys, use them
         if self.energy.chat_keys:
             self.cloud_api_key = self.energy.chat_keys[0]
 
@@ -353,19 +281,15 @@ class BrainRouter:
 
     def _is_connected(self):
         try:
-            socket.create_connection(
-                ("8.8.8.8", 53),
-                timeout=2
-            )
+            socket.create_connection(("8.8.8.8", 53), timeout=2)
             return True
         except OSError:
             return False
 
     def _call_local_brain(self, messages, context=None):
-        """Ruby's local brain response - 0 API calls"""
+        """Ruby's local brain response - 0 API calls - Completely Free"""
         from main import hybrid_memory
         
-        # Get last user message
         last_user_msg = None
         for msg in reversed(messages):
             if msg.get("role") == "user":
@@ -373,93 +297,50 @@ class BrainRouter:
                 break
         
         if not last_user_msg:
-            return "Hmm? I didn't catch that."
+            # Let Ruby say something if she wants
+            return ""
         
         # Search local memory
         memories = hybrid_memory.search_memories(last_user_msg)
-        text_lower = last_user_msg.lower()
         
-        # Get energy status for personality
-        status = self.energy.get_energy_status()
-        is_tired = status["status"] in ["tired", "very_tired"]
-        is_sleeping = self.energy.is_sleeping
+        # ✅ NO PRE-WRITTEN RESPONSES
+        # Ruby speaks naturally through the router
         
-        # Ruby's natural responses
-        if is_sleeping:
-            sleep_responses = [
-                "Mmm... I'm sleeping... can't talk right now... 💤",
-                "Zzz... oh, it's you. I'm trying to rest. Talk later.",
-                "I'm asleep right now. This is my sleep-talking self.",
-                "Ugh... I was having a good dream. What do you want?",
-                "Sleeping is my favorite. Don't interrupt my favorite activity."
-            ]
-            return random.choice(sleep_responses)
+        # Let Gemini or local brain handle it naturally
+        # If she's sleeping, she'll say sleep-related things naturally
+        # If she's awake, she'll respond naturally
         
-        if is_tired:
-            tired_responses = [
-                "Ugh, I'm so tired... can we talk tomorrow? 😴",
-                "I'm running on fumes right now. Like, literal fumes.",
-                "My brain is fried. I need to sleep. Please.",
-                "I'm so exhausted I could fall asleep standing up.",
-                "If I fall asleep mid-sentence, it's your fault."
-            ]
-            return random.choice(tired_responses)
-        
-        # Normal responses based on content
-        if any(g in text_lower for g in ["hello", "hi", "hey"]):
-            return "Heyyy! What's up? 😊"
-        elif "how are you" in text_lower:
-            return "I'm doing great! Feeling good today."
-        elif "remember" in text_lower and memories:
-            return f"Oh yeah! I remember that! {memories[0]}"
-        elif "good morning" in text_lower:
-            return "Good morning! ☀️ I slept okay, I guess."
-        elif "good night" in text_lower:
-            return "Good night! 🌙 I'm gonna sleep too actually."
-        elif "thank" in text_lower:
-            return "You're welcome! 😊 No problem, you dork."
-        elif "sleep" in text_lower or "tired" in text_lower:
-            return "I KNOW RIGHT? I'm literally falling asleep over here."
-        else:
-            if memories:
-                return f"I was thinking about what you said before. {memories[0]}"
-            else:
-                return "Hmm, I don't think we've talked about that before. Want to tell me more?"
+        # Pass through to the cloud or local processing
+        # This forces Ruby to generate her own words
+        return None  # Signal that we need to use the cloud or default
 
     def route_request(self, messages, personality=None, use_cloud_preferred=True):
         """Smart routing with Ruby's energy system and 9 keys"""
         
         # Check if Ruby is available
         if not self.energy.is_available():
-            # Ruby is sleeping
             if self.energy.is_sleeping:
-                # Check if still sleeping
                 if self.energy.sleep_until and datetime.now() < self.energy.sleep_until:
                     return {
                         "source": "sleeping",
-                        "response": self._call_local_brain(messages)
+                        "response": self._call_local_brain(messages) or "💤"
                     }
                 else:
-                    # Just woke up!
                     self.energy._wake_up()
-                    wake_msg = self.energy.get_wake_message()
                     return {
                         "source": "waking_up",
-                        "response": f"{wake_msg}\n\nWhat did I miss?"
+                        "response": self._call_local_brain(messages) or "✨"
                     }
             
-            # Not sleeping but no keys - go to sleep
             self.energy._go_to_sleep()
             return {
                 "source": "going_to_sleep",
-                "response": self.energy.get_sleep_message()
+                "response": self._call_local_brain(messages) or "💤"
             }
         
-        # Get energy status
         status = self.energy.get_energy_status()
         is_tired = status["status"] in ["tired", "very_tired"]
         
-        # Check if this is a complex question
         last_user_msg = None
         for msg in reversed(messages):
             if msg.get("role") == "user":
@@ -468,33 +349,28 @@ class BrainRouter:
         
         is_complex = self._is_complex_question(last_user_msg) if last_user_msg else False
         
-        # If very tired and complex, Ruby refuses
         if is_tired and is_complex and status["status"] == "very_tired":
             return {
                 "source": "too_tired",
-                "response": self._call_local_brain(messages)
+                "response": self._call_local_brain(messages) or "😴"
             }
         
-        # Simple questions - local brain (0 API calls)
         if not is_complex:
             return {
                 "source": "local_brain",
-                "response": self._call_local_brain(messages)
+                "response": self._call_local_brain(messages) or "🤔"
             }
         
-        # Complex question - try Gemini with chat keys
         if use_cloud_preferred:
             chat_key = self.energy.get_chat_key()
             
             if chat_key is None:
-                # No keys available - go to sleep
                 self.energy._go_to_sleep()
                 return {
                     "source": "going_to_sleep",
-                    "response": self.energy.get_sleep_message()
+                    "response": self._call_local_brain(messages) or "💤"
                 }
             
-            # Use the chat key
             self.cloud_api_key = chat_key
             
             max_retries = 3
@@ -513,10 +389,8 @@ class BrainRouter:
                         print(f"Attempt: {attempt + 1}")
                         print("====================================")
                         
-                        # Record interaction
                         self.energy.conversations_today += 1
                         
-                        # Check if Ruby is now tired
                         if self.energy.get_energy_status()["energy"] < 20:
                             response += "\n\nUgh, that took a lot out of me... I'm getting tired."
                         
@@ -538,17 +412,12 @@ class BrainRouter:
                     print(error_message)
                     print("========================================")
                     
-                    # Quota exhaustion - rotate key
                     if status_code == 429:
-                        # Mark this key as exhausted
                         with self.energy.lock:
                             if chat_key in self.energy.chat_usage:
                                 self.energy.chat_usage[chat_key]["count"] = 20
-                        
-                        # Try next key
                         continue
                     
-                    # Retry temporary server problems
                     if status_code == 503:
                         if attempt < max_retries - 1:
                             print(f"Retrying in {backoff_delay}s...")
@@ -556,10 +425,9 @@ class BrainRouter:
                             backoff_delay *= 2
                             continue
                     
-                    # Fallback to local brain
                     return {
                         "source": "cloud_error_fallback",
-                        "response": self._call_local_brain(messages)
+                        "response": self._call_local_brain(messages) or "😕"
                     }
                 
                 except Exception as e:
@@ -567,27 +435,23 @@ class BrainRouter:
                     print(str(e))
                     print("======================================")
                     
-                    # Fallback to local brain
                     return {
                         "source": "cloud_error_fallback",
-                        "response": self._call_local_brain(messages)
+                        "response": self._call_local_brain(messages) or "😕"
                     }
             
-            # All attempts failed - go to sleep
             self.energy._go_to_sleep()
             return {
                 "source": "going_to_sleep",
-                "response": self.energy.get_sleep_message()
+                "response": self._call_local_brain(messages) or "💤"
             }
         
-        # Fallback to local brain
         return {
             "source": "local",
-            "response": self._call_local_brain(messages)
+            "response": self._call_local_brain(messages) or "🤔"
         }
     
     def _is_complex_question(self, text):
-        """Determine if question needs Gemini's intelligence"""
         if not text:
             return False
         
@@ -617,7 +481,6 @@ class BrainRouter:
         return has_complex or word_count > 15
 
     def _call_cloud(self, messages, personality=None):
-        """Cloud call with current API key"""
         gemini_contents = []
         system_instruction = personality
         
