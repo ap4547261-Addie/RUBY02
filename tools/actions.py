@@ -1,4 +1,4 @@
-# tools/instagram_connector.py - Updated with ActionTool
+# tools/instagram_connector.py
 import os
 import json
 import random
@@ -163,13 +163,12 @@ if __name__ == "__main__":
 '''
         
         self.file_tool.write_file(self.auto_script_path, auto_script)
-        os.chmod(self.auto_script_path, 0o755)  # Make executable
+        os.chmod(self.auto_script_path, 0o755)
     
     def run_auto_post(self) -> dict:
         """Run auto-post script"""
         result = self.action_tool.run_python_script(self.auto_script_path)
         
-        # Log result
         self.memory.save_hybrid_memory(
             f"Ruby auto-posted at {datetime.now().strftime('%H:%M')}",
             importance=2,
@@ -205,14 +204,11 @@ if __name__ == "__main__":
     def run_backup(self) -> dict:
         """Run backup of Instagram data"""
         try:
-            # Create backup directory
             backup_dir = os.path.join(self.data_dir, "backups")
             os.makedirs(backup_dir, exist_ok=True)
             
-            # Create backup file
             backup_file = os.path.join(backup_dir, f"instagram_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
             
-            # Gather all data
             backup_data = {
                 "stats": self.stats,
                 "learnings": self.get_learnings(),
@@ -223,13 +219,11 @@ if __name__ == "__main__":
                 "backup_time": datetime.now().isoformat()
             }
             
-            # Write backup
             self.file_tool.write_file(
                 backup_file,
                 json.dumps(backup_data, indent=2, default=str)
             )
             
-            # Save to memory
             self.memory.save_hybrid_memory(
                 f"Instagram backup created: {os.path.basename(backup_file)}",
                 importance=3,
@@ -254,24 +248,19 @@ if __name__ == "__main__":
             if not os.path.exists(backup_file):
                 return {"success": False, "message": "Backup file not found"}
             
-            # Read backup data
             backup_data = json.loads(self.file_tool.read_file(backup_file))
             
-            # Restore stats
             if "stats" in backup_data:
                 self.stats.update(backup_data["stats"])
             
-            # Restore learnings
             if "learnings" in backup_data:
                 for learning in backup_data["learnings"]:
                     self.save_learning(learning["learning"], learning.get("importance", 2))
             
-            # Restore content ideas
             if "content_ideas" in backup_data:
                 for idea in backup_data["content_ideas"]:
                     self.save_content_idea(idea["idea"], idea.get("category", "post"))
             
-            # Save restored data
             self._save_data()
             
             self.memory.save_hybrid_memory(
@@ -294,7 +283,6 @@ if __name__ == "__main__":
     def schedule_post(self, caption: str, image_path: str = None, scheduled_time: datetime = None) -> dict:
         """Schedule a post for later"""
         try:
-            # Load existing scheduled posts
             posts = []
             if os.path.exists(self.scheduled_posts_file):
                 try:
@@ -302,7 +290,6 @@ if __name__ == "__main__":
                 except:
                     pass
             
-            # Add new scheduled post
             scheduled_post = {
                 "id": len(posts) + 1,
                 "caption": caption,
@@ -313,7 +300,6 @@ if __name__ == "__main__":
             }
             posts.append(scheduled_post)
             
-            # Save back
             self.file_tool.write_file(
                 self.scheduled_posts_file,
                 json.dumps(posts, indent=2, default=str)
@@ -347,17 +333,14 @@ if __name__ == "__main__":
     
     def process_dm(self, message: str, username: str) -> str:
         """Process a DM from Instagram"""
-        # Save DM
         self.memory.save_hybrid_memory(
             f"DM from {username}: {message[:50]}...",
             importance=3,
             category="instagram_dm"
         )
         
-        # Generate response
         response = self._generate_dm_response(message, username)
         
-        # Save response
         self.memory.save_hybrid_memory(
             f"Ruby replied to {username} in DM: {response[:50]}...",
             importance=2,
@@ -387,22 +370,18 @@ if __name__ == "__main__":
     def connect(self, username: str = None, password: str = None):
         """Connect Ruby to Instagram"""
         try:
-            # Check if already logged in via browser profile
             result = self.browser.browse_social(
                 self.INSTAGRAM_URL,
                 action_type="read"
             )
             
-            # Check if we got Instagram content
             if "instagram" in result.lower() or "login" not in result.lower():
                 self.connected = True
                 self.last_sync = datetime.now()
                 
-                # Store connection in memory and file
                 connection_fact = f"Ruby connected to Instagram on {datetime.now().strftime('%B %d, %Y')}"
                 self.memory.save_hybrid_memory(connection_fact, importance=3, category="instagram")
                 
-                # Save connection data
                 self._save_data()
                 print("📸 Ruby connected to Instagram!")
                 return True
@@ -420,27 +399,22 @@ if __name__ == "__main__":
                 action_type="read"
             )
             
-            # Extract profile data
             if "followers" in result:
                 import re
-                # Extract followers count
                 followers_match = re.search(r'(\d+[.,]?\d*)\s*(?:followers|Followers)', result)
                 if followers_match:
                     self.stats["followers"] = int(followers_match.group(1).replace(',', '').replace('.', ''))
                 
-                # Extract posts count
                 posts_match = re.search(r'(\d+[.,]?\d*)\s*(?:posts|Posts)', result)
                 if posts_match:
                     self.stats["posts"] = int(posts_match.group(1).replace(',', ''))
             
-            # Store in memory
             self.memory.save_hybrid_memory(
                 f"Ruby's Instagram: {self.stats['followers']} followers, {self.stats['posts']} posts",
                 importance=2,
                 category="instagram_stats"
             )
             
-            # Save to file
             self._save_data()
             
             return self.stats
@@ -472,12 +446,12 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Save comment error: {e}")
     
-    def get_comments_from_file(self, limit: int = 20) -> List[Dict]:
-        """Get comments from file for learning"""
+    def get_comments_from_file(self, limit: int = None) -> List[Dict]:
+        """Get comments from file for learning - NO LIMIT"""
         try:
             if os.path.exists(self.comments_file):
                 data = json.loads(self.file_tool.read_file(self.comments_file))
-                return data[-limit:]
+                return data
             return []
         except:
             return []
@@ -506,13 +480,13 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Save content idea error: {e}")
     
-    def get_content_ideas(self, limit: int = 10) -> List[str]:
-        """Get content ideas from file"""
+    def get_content_ideas(self, limit: int = None) -> List[str]:
+        """Get content ideas from file - NO LIMIT"""
         try:
             if os.path.exists(self.content_ideas_file):
                 data = json.loads(self.file_tool.read_file(self.content_ideas_file))
                 unused = [item for item in data if not item.get("used", False)]
-                return [item["idea"] for item in unused[:limit]]
+                return [item["idea"] for item in unused]
             return []
         except:
             return []
@@ -542,236 +516,13 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Save learning error: {e}")
     
-    def get_learnings(self, limit: int = 10) -> List[str]:
-        """Get learnings from file"""
+    def get_learnings(self, limit: int = None) -> List[str]:
+        """Get learnings from file - NO LIMIT"""
         try:
             if os.path.exists(self.learnings_file):
                 data = json.loads(self.file_tool.read_file(self.learnings_file))
                 sorted_data = sorted(data, key=lambda x: (x.get("importance", 0), x["timestamp"]), reverse=True)
-                return [item["learning"] for item in sorted_data[:limit]]
+                return [item["learning"] for item in sorted_data]
             return []
         except:
             return []
-    
-    def learn_from_instagram(self):
-        """Main learning loop - what Ruby learns from Instagram"""
-        self.get_profile_data()
-        comments = self.get_comments_from_file()
-        analysis = self.analyze_engagement()
-        
-        insights = []
-        
-        if analysis.get("engagement_rate", 0) > 50:
-            insight = "Followers love Ruby's content! High positive engagement!"
-            insights.append(insight)
-            self.save_learning(insight, importance=3)
-        
-        if analysis.get("engagement_rate", 0) > 30:
-            insight = "Good engagement! Keep posting what followers like."
-            insights.append(insight)
-            self.save_learning(insight, importance=2)
-        
-        if analysis.get("question_comments", 0) > 5:
-            insight = "Followers ask lots of questions! Ruby should do a Q&A."
-            insights.append(insight)
-            self.save_learning(insight, importance=2)
-        
-        if analysis.get("collab_requests", 0) > 2:
-            insight = "Collaboration requests coming in! Ruby should consider collabs."
-            insights.append(insight)
-            self.save_learning(insight, importance=3)
-        
-        if self.stats.get("followers", 0) > 1000:
-            insight = f"Ruby hit {self.stats['followers']} followers! 🎉"
-            insights.append(insight)
-            self.save_learning(insight, importance=3)
-        
-        for insight in insights:
-            if "Q&A" in insight:
-                self.save_content_idea("Q&A session with followers!", "interactive")
-            if "collab" in insight:
-                self.save_content_idea("Collaboration post with another creator!", "collab")
-        
-        self._save_data()
-        return insights
-    
-    def analyze_engagement(self) -> dict:
-        """Analyze Instagram engagement patterns"""
-        comments = self.get_comments_from_file()
-        
-        if not comments:
-            return {"message": "No comments yet"}
-        
-        analysis = {
-            "total_comments": len(comments),
-            "positive_comments": 0,
-            "question_comments": 0,
-            "collab_requests": 0,
-            "engagement_rate": 0
-        }
-        
-        for item in comments:
-            comment = item.get("comment", "").lower()
-            if any(word in comment for word in ["love", "like", "cute", "pretty", "gorgeous"]):
-                analysis["positive_comments"] += 1
-            if "?" in comment:
-                analysis["question_comments"] += 1
-            if any(word in comment for word in ["collab", "collaboration", "together"]):
-                analysis["collab_requests"] += 1
-        
-        if analysis["total_comments"] > 0:
-            analysis["engagement_rate"] = (analysis["positive_comments"] / analysis["total_comments"]) * 100
-        
-        self.file_tool.write_file(
-            os.path.join(self.data_dir, "analysis.json"),
-            json.dumps(analysis, indent=2)
-        )
-        
-        return analysis
-    
-    def generate_post_idea(self) -> str:
-        """Generate post ideas from Instagram learnings and files"""
-        saved_ideas = self.get_content_ideas()
-        
-        if saved_ideas:
-            return random.choice(saved_ideas)
-        
-        ideas = [
-            "Daily outfit vibe! What do you think? 💕",
-            "Ruby's mood today: ✨💅 vibes only!",
-            "POV: You caught Ruby in her natural element 📸",
-            "What should Ruby post next? Drop your ideas! 💭",
-            "Ruby's thought of the day: 💭 (tell me yours!)",
-            "Behind the scenes of Ruby's day 📸✨",
-            "Q&A time! Ask Ruby anything! 💕",
-            "Ruby's fashion tips for the week! 💅"
-        ]
-        
-        if self.stats.get("followers", 0) > 500:
-            ideas.append("Thank you all for 500+ followers! 💕🎉")
-        
-        if self.stats.get("posts", 0) > 10:
-            ideas.append("Ruby's 10th post celebration! 🎉")
-        
-        idea = random.choice(ideas)
-        self.save_content_idea(idea)
-        
-        return idea
-    
-    def process_comment(self, comment: str, username: str = "follower") -> str:
-        """Process a comment and generate Ruby's response"""
-        self.save_comment_to_file(comment, username)
-        response = self._generate_response(comment)
-        self._learn_from_comment(comment, username)
-        
-        interaction = f"Ruby replied to {username}: {response[:50]}..."
-        self.memory.save_hybrid_memory(interaction, importance=2, category="instagram_interactions")
-        self.save_learning(interaction, importance=1)
-        
-        return response
-    
-    def _generate_response(self, comment: str) -> str:
-        """Generate Ruby's natural response to comments"""
-        comment_lower = comment.lower()
-        
-        responses = {
-            "love": [
-                "aww thank you! 💕 you're so sweet!",
-                "omg thank you! 🥺 this made my day!",
-                "sTOP you're making me blush! 😊💕",
-                "thank you bestie! 💅✨"
-            ],
-            "question": [
-                "great question! 💭 let me think about that...",
-                "ooh good question! i'd say... 😏",
-                "OMG i've been thinking about that too!",
-                "interesting question! here's my take... 💕"
-            ],
-            "collab": [
-                "collab?! 😱 let's do it! DM me! 💕",
-                "omg yes! i'd love to collab with you! 🎉",
-                "sTOP i was just thinking about collabing!",
-                "definitely! let's make something amazing! ✨"
-            ],
-            "follow": [
-                "welcome to the vibe! 💕✨",
-                "thank you for following! you're the best! 🥺",
-                "omg new follower?! hi! 💕",
-                "welcome to Ruby's world! 🌎✨"
-            ]
-        }
-        
-        if any(word in comment_lower for word in ["love", "like", "cute", "pretty", "gorgeous"]):
-            return random.choice(responses["love"])
-        if "?" in comment_lower:
-            return random.choice(responses["question"])
-        if any(word in comment_lower for word in ["collab", "collaboration", "together"]):
-            return random.choice(responses["collab"])
-        if any(word in comment_lower for word in ["follow", "new follower"]):
-            return random.choice(responses["follow"])
-        
-        default_responses = [
-            "omg hey! 😊 thanks for the comment!",
-            "hi! 💕 you're so sweet for commenting!",
-            "i see you! 💅 thanks for showing up!",
-            "you're the best! 🥺 appreciate you!",
-            "omg i love your energy! 💕",
-            "you're so nice! made my day! 🥺"
-        ]
-        return random.choice(default_responses)
-    
-    def _learn_from_comment(self, comment: str, username: str):
-        """Learn from comment patterns"""
-        comment_lower = comment.lower()
-        
-        if any(word in comment_lower for word in ["outfit", "style", "fashion", "look"]):
-            learning = f"Followers are interested in fashion content from {username}"
-            self.save_learning(learning, importance=3)
-            self.memory.save_hybrid_memory(learning, importance=3, category="instagram_learning")
-        
-        if "?" in comment:
-            question = comment.split("?")[0] + "?"
-            learning = f"Common question on Instagram: {question}"
-            self.save_learning(learning, importance=2)
-            self.memory.save_hybrid_memory(learning, importance=2, category="instagram_questions")
-        
-        if any(word in comment_lower for word in ["collab", "collaboration"]):
-            learning = f"@{username} is interested in collaborating!"
-            self.save_learning(learning, importance=3)
-            self.memory.save_hybrid_memory(learning, importance=3, category="instagram_collabs")
-    
-    def export_instagram_data(self) -> str:
-        """Export all Instagram data to a single file"""
-        export_data = {
-            "stats": self.stats,
-            "learnings": self.get_learnings(),
-            "content_ideas": self.get_content_ideas(),
-            "scheduled_posts": self.get_scheduled_posts(),
-            "connected": self.connected,
-            "last_sync": self.last_sync.isoformat() if self.last_sync else None,
-            "exported_at": datetime.now().isoformat()
-        }
-        
-        export_file = os.path.join(self.data_dir, f"instagram_export_{datetime.now().strftime('%Y%m%d')}.json")
-        self.file_tool.write_file(
-            export_file,
-            json.dumps(export_data, indent=2, default=str)
-        )
-        
-        return export_file
-    
-    def sync_data(self):
-        """Sync all Instagram data to local memory and files"""
-        self.last_sync = datetime.now()
-        self.get_profile_data()
-        insights = self.learn_from_instagram()
-        
-        sync_fact = f"Instagram sync at {self.last_sync.strftime('%H:%M')} - {self.stats['followers']} followers"
-        self.memory.save_hybrid_memory(sync_fact, importance=1, category="instagram_sync")
-        self.save_learning(sync_fact, importance=1)
-        
-        self.export_instagram_data()
-        self._save_data()
-        
-        print(f"📸 Instagram synced! Followers: {self.stats['followers']}")
-        return self.stats
