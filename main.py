@@ -272,10 +272,10 @@ def search_and_learn(query: str) -> str:
         
         if result.get("success"):
             # Get knowledge from local DB
-            knowledge = data_ingestion.search_knowledge(query, limit=3)
+            knowledge = data_ingestion.search_knowledge(query)
             if knowledge:
                 response = f"📚 I learned about '{query}' from the web!\n\n"
-                for item in knowledge[:3]:
+                for item in knowledge:
                     response += f"• {item['text'][:200]}...\n"
                 return response
             else:
