@@ -331,7 +331,7 @@ class BrainRouter:
                 category="user_questions"
             )
         
-        # ✅ NO LIMIT - ALWAYS ask a question if there are any
+        # NO LIMIT - ALWAYS ask a question if there are any
         questions = hybrid_memory.search_memories("User asked")
         if questions:
             question = random.choice(questions)
