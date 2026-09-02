@@ -331,13 +331,12 @@ class BrainRouter:
                 category="user_questions"
             )
         
-        # Ask a random question to ANYONE - NO LIMIT!
-        if random.random() < 0.3:
-            questions = hybrid_memory.search_memories("User asked")
-            if questions:
-                question = random.choice(questions)
-                question = question.replace("User asked: ", "")
-                return question
+        # ✅ NO LIMIT - ALWAYS ask a question if there are any
+        questions = hybrid_memory.search_memories("User asked")
+        if questions:
+            question = random.choice(questions)
+            question = question.replace("User asked: ", "")
+            return question
         
         if memories:
             return memories[0]
