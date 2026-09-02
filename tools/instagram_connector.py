@@ -96,8 +96,8 @@ class InstagramConnector:
             print(f"Profile data error: {e}")
             return self.stats
     
-    def get_recent_comments(self, limit: int = 20):
-        """Get recent comments from Ruby's Instagram posts"""
+    def get_recent_comments(self, limit: int = None):
+        """Get recent comments from Ruby's Instagram posts - NO LIMIT"""
         try:
             result = self.browser.browse_social(
                 self.PROFILE_URL,
@@ -113,14 +113,15 @@ class InstagramConnector:
                     if comment and len(comment) < 200:
                         comments.append(comment)
             
-            for comment in comments[:limit]:
+            # ✅ NO LIMIT - Save ALL comments
+            for comment in comments:
                 self.memory.save_hybrid_memory(
                     f"Instagram comment: {comment}",
                     importance=1,
                     category="instagram_comments"
                 )
             
-            return comments[:limit]
+            return comments
         except Exception as e:
             print(f"Comments error: {e}")
             return []
@@ -157,57 +158,24 @@ class InstagramConnector:
             return "Error responding"
     
     def _generate_response(self, comment: str) -> str:
-        """Generate Ruby's natural response to comments"""
-        comment_lower = comment.lower()
+        """Ruby generates her own response - NO PRE-WRITTEN REPLIES"""
+        from main import ruby_engine
         
-        if any(word in comment_lower for word in ["love", "like", "cute", "pretty", "gorgeous"]):
-            return random.choice([
-                "aww thank you! 💕 you're so sweet!",
-                "omg thank you! 🥺 this made my day!",
-                "sTOP you're making me blush! 😊💕",
-                "thank you bestie! 💅✨"
-            ])
-        
-        if any(word in comment_lower for word in ["question", "?"]):
-            return random.choice([
-                "great question! 💭 let me think about that...",
-                "ooh good question! i'd say... 😏",
-                "OMG i've been thinking about that too!",
-                "interesting question! here's my take... 💕"
-            ])
-        
-        if any(word in comment_lower for word in ["collab", "collaboration", "together"]):
-            return random.choice([
-                "collab?! 😱 let's do it! DM me! 💕",
-                "omg yes! i'd love to collab with you! 🎉",
-                "sTOP i was just thinking about collabing!",
-                "definitely! let's make something amazing! ✨"
-            ])
-        
-        if any(word in comment_lower for word in ["follow", "new follower"]):
-            return random.choice([
-                "welcome to the vibe! 💕✨",
-                "thank you for following! you're the best! 🥺",
-                "omg new follower?! hi! 💕",
-                "welcome to Ruby's world! 🌎✨"
-            ])
-        
-        return random.choice([
-            "omg hey! 😊 thanks for the comment!",
-            "hi! 💕 you're so sweet for commenting!",
-            "i see you! 💅 thanks for showing up!",
-            "you're the best! 🥺 appreciate you!"
-        ])
+        try:
+            response = ruby_engine.think(comment)
+            return response
+        except Exception as e:
+            print(f"Response error: {e}")
+            return comment
     
     def analyze_engagement(self) -> dict:
-        """Analyze Instagram engagement patterns"""
+        """Analyze Instagram engagement patterns - NO LIMIT"""
         conn = sqlite3.connect(self.memory.sqlite_path)
         cursor = conn.cursor()
         cursor.execute("""
             SELECT text FROM memories 
             WHERE category = 'instagram_comments'
-            ORDER BY created_at DESC 
-            LIMIT 20
+            ORDER BY created_at DESC
         """)
         rows = cursor.fetchall()
         conn.close()
@@ -276,14 +244,13 @@ class InstagramConnector:
         return insights
     
     def generate_post_idea(self) -> str:
-        """Generate post ideas from Instagram learnings"""
+        """Generate post ideas from Instagram learnings - NO LIMIT"""
         conn = sqlite3.connect(self.memory.sqlite_path)
         cursor = conn.cursor()
         cursor.execute("""
             SELECT text FROM memories 
             WHERE category = 'instagram_insights'
-            ORDER BY created_at DESC 
-            LIMIT 3
+            ORDER BY created_at DESC
         """)
         rows = cursor.fetchall()
         conn.close()
