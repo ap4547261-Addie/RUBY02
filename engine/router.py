@@ -256,14 +256,12 @@ class RubyEnergySystem:
         return True
     
     def get_sleep_message(self):
-        """Ruby decides what to say when going to sleep - no pre-written responses"""
-        # Just let Ruby say what she wants naturally
-        return "Sleeping..."  # This will be overridden by _call_local_brain
+        """Ruby decides what to say when going to sleep"""
+        return "💤"
     
     def get_wake_message(self):
-        """Ruby decides what to say when waking up - no pre-written responses"""
-        # Just let Ruby say what she wants naturally
-        return "Waking up..."  # This will be overridden by _call_local_brain
+        """Ruby decides what to say when waking up"""
+        return "✨"
 
 class BrainRouter:
     def __init__(self, cloud_api_key=None, local_model_path=None):
@@ -287,7 +285,7 @@ class BrainRouter:
             return False
 
     def _call_local_brain(self, messages, context=None):
-        """Ruby's local brain response - 0 API calls - Completely Free"""
+        """Ruby's local brain response - 0 API calls"""
         from main import hybrid_memory
         
         last_user_msg = None
@@ -297,22 +295,16 @@ class BrainRouter:
                 break
         
         if not last_user_msg:
-            # Let Ruby say something if she wants
-            return ""
+            return "Hmm?"
         
         # Search local memory
         memories = hybrid_memory.search_memories(last_user_msg)
         
-        # ✅ NO PRE-WRITTEN RESPONSES
-        # Ruby speaks naturally through the router
-        
-        # Let Gemini or local brain handle it naturally
-        # If she's sleeping, she'll say sleep-related things naturally
-        # If she's awake, she'll respond naturally
-        
-        # Pass through to the cloud or local processing
-        # This forces Ruby to generate her own words
-        return None  # Signal that we need to use the cloud or default
+        # Return memory or echo user
+        if memories:
+            return memories[0]
+        else:
+            return last_user_msg
 
     def route_request(self, messages, personality=None, use_cloud_preferred=True):
         """Smart routing with Ruby's energy system and 9 keys"""
@@ -323,19 +315,19 @@ class BrainRouter:
                 if self.energy.sleep_until and datetime.now() < self.energy.sleep_until:
                     return {
                         "source": "sleeping",
-                        "response": self._call_local_brain(messages) or "💤"
+                        "response": self._call_local_brain(messages)
                     }
                 else:
                     self.energy._wake_up()
                     return {
                         "source": "waking_up",
-                        "response": self._call_local_brain(messages) or "✨"
+                        "response": self._call_local_brain(messages)
                     }
             
             self.energy._go_to_sleep()
             return {
                 "source": "going_to_sleep",
-                "response": self._call_local_brain(messages) or "💤"
+                "response": self._call_local_brain(messages)
             }
         
         status = self.energy.get_energy_status()
@@ -352,13 +344,13 @@ class BrainRouter:
         if is_tired and is_complex and status["status"] == "very_tired":
             return {
                 "source": "too_tired",
-                "response": self._call_local_brain(messages) or "😴"
+                "response": self._call_local_brain(messages)
             }
         
         if not is_complex:
             return {
                 "source": "local_brain",
-                "response": self._call_local_brain(messages) or "🤔"
+                "response": self._call_local_brain(messages)
             }
         
         if use_cloud_preferred:
@@ -368,7 +360,7 @@ class BrainRouter:
                 self.energy._go_to_sleep()
                 return {
                     "source": "going_to_sleep",
-                    "response": self._call_local_brain(messages) or "💤"
+                    "response": self._call_local_brain(messages)
                 }
             
             self.cloud_api_key = chat_key
@@ -427,7 +419,7 @@ class BrainRouter:
                     
                     return {
                         "source": "cloud_error_fallback",
-                        "response": self._call_local_brain(messages) or "😕"
+                        "response": self._call_local_brain(messages)
                     }
                 
                 except Exception as e:
@@ -437,18 +429,18 @@ class BrainRouter:
                     
                     return {
                         "source": "cloud_error_fallback",
-                        "response": self._call_local_brain(messages) or "😕"
+                        "response": self._call_local_brain(messages)
                     }
             
             self.energy._go_to_sleep()
             return {
                 "source": "going_to_sleep",
-                "response": self._call_local_brain(messages) or "💤"
+                "response": self._call_local_brain(messages)
             }
         
         return {
             "source": "local",
-            "response": self._call_local_brain(messages) or "🤔"
+            "response": self._call_local_brain(messages)
         }
     
     def _is_complex_question(self, text):
