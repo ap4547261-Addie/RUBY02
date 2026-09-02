@@ -154,8 +154,8 @@ class HybridMemorySystem:
         except Exception as e:
             print(f"SQLite Save Error: {e}")
 
-    def search_memories(self, query: str, limit: int = 5) -> str:
-        """Search local memories - 0 API calls, just SQLite"""
+    def search_memories(self, query: str, limit: int = None) -> str:
+        """Search local memories - 0 API calls, just SQLite - NO LIMIT"""
         memories_found = []
         
         try:
@@ -180,9 +180,7 @@ class HybridMemorySystem:
                         FROM memories 
                         WHERE {' OR '.join(conditions)}
                         ORDER BY importance DESC, created_at DESC
-                        LIMIT ?
                     """
-                    params.append(limit)
                     cursor.execute(sql, params)
                 else:
                     # Fallback to most recent
@@ -190,16 +188,14 @@ class HybridMemorySystem:
                         SELECT text, importance, created_at 
                         FROM memories 
                         ORDER BY importance DESC, created_at DESC
-                        LIMIT ?
-                    """, (limit,))
+                    """)
             else:
                 # No keywords - return most recent
                 cursor.execute("""
                     SELECT text, importance, created_at 
                     FROM memories 
                     ORDER BY importance DESC, created_at DESC
-                    LIMIT ?
-                """, (limit,))
+                """)
             
             rows = cursor.fetchall()
             conn.close()
@@ -225,8 +221,8 @@ class HybridMemorySystem:
         
         return ", ".join(memories_found)
 
-    def get_memories_by_category(self, category: str, limit: int = 10) -> list:
-        """Get memories by category"""
+    def get_memories_by_category(self, category: str, limit: int = None) -> list:
+        """Get memories by category - NO LIMIT"""
         try:
             conn = sqlite3.connect(self.sqlite_path)
             cursor = conn.cursor()
@@ -235,8 +231,7 @@ class HybridMemorySystem:
                 FROM memories 
                 WHERE category = ?
                 ORDER BY importance DESC, created_at DESC
-                LIMIT ?
-            """, (category, limit))
+            """, (category,))
             rows = cursor.fetchall()
             conn.close()
             return [row[0] for row in rows]
@@ -244,17 +239,16 @@ class HybridMemorySystem:
             print(f"Category search error: {e}")
             return []
 
-    def get_recent_memories(self, limit: int = 5) -> list:
-        """Get most recent memories"""
+    def get_recent_memories(self, limit: int = None) -> list:
+        """Get most recent memories - NO LIMIT"""
         try:
             conn = sqlite3.connect(self.sqlite_path)
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT text, created_at 
                 FROM memories 
-                ORDER BY created_at DESC 
-                LIMIT ?
-            """, (limit,))
+                ORDER BY created_at DESC
+            """)
             rows = cursor.fetchall()
             conn.close()
             return [row[0] for row in rows]
@@ -262,8 +256,8 @@ class HybridMemorySystem:
             print(f"Recent memories error: {e}")
             return []
 
-    def get_important_memories(self, limit: int = 10) -> list:
-        """Get most important memories"""
+    def get_important_memories(self, limit: int = None) -> list:
+        """Get most important memories - NO LIMIT"""
         try:
             conn = sqlite3.connect(self.sqlite_path)
             cursor = conn.cursor()
@@ -272,8 +266,7 @@ class HybridMemorySystem:
                 FROM memories 
                 WHERE importance >= 3
                 ORDER BY importance DESC, created_at DESC
-                LIMIT ?
-            """, (limit,))
+            """)
             rows = cursor.fetchall()
             conn.close()
             return [row[0] for row in rows]
