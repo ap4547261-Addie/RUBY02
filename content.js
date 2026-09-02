@@ -27,7 +27,6 @@
                 profile: null
             };
             
-            // Profile info
             const profileName = document.querySelector('h1, [data-testid="profile-name"]');
             const bio = document.querySelector('[data-testid="profile-bio"]');
             if (profileName) {
@@ -37,27 +36,21 @@
                 };
             }
             
-            // Posts
-            document.querySelectorAll('article, [role="article"]').forEach((post, i) => {
-                if (i < 5) {
-                    const text = post.textContent || '';
-                    const images = post.querySelectorAll('img');
-                    data.posts.push({
-                        text: text.slice(0, 300),
-                        images: images.length,
-                        index: i
-                    });
-                }
+            // Posts - NO LIMIT
+            document.querySelectorAll('article, [role="article"]').forEach((post) => {
+                const text = post.textContent || '';
+                const images = post.querySelectorAll('img');
+                data.posts.push({
+                    text: text.slice(0, 300),
+                    images: images.length
+                });
             });
             
-            // Comments
-            document.querySelectorAll('[role="comment"], .comment').forEach((comment, i) => {
-                if (i < 10) {
-                    data.comments.push({
-                        text: comment.textContent.slice(0, 200),
-                        index: i
-                    });
-                }
+            // Comments - NO LIMIT
+            document.querySelectorAll('[role="comment"], .comment').forEach((comment) => {
+                data.comments.push({
+                    text: comment.textContent.slice(0, 200)
+                });
             });
             
             return data;
@@ -71,7 +64,6 @@
                 channel: null
             };
             
-            // Video info
             const title = document.querySelector('h1.ytd-video-primary-info-renderer');
             const channel = document.querySelector('#owner-name a');
             const views = document.querySelector('.view-count');
@@ -85,14 +77,11 @@
                 };
             }
             
-            // Comments
-            document.querySelectorAll('#comments #content #content-text').forEach((comment, i) => {
-                if (i < 10) {
-                    data.comments.push({
-                        text: comment.textContent.slice(0, 200),
-                        index: i
-                    });
-                }
+            // Comments - NO LIMIT
+            document.querySelectorAll('#comments #content #content-text').forEach((comment) => {
+                data.comments.push({
+                    text: comment.textContent.slice(0, 200)
+                });
             });
             
             return data;
@@ -105,27 +94,21 @@
                 comments: []
             };
             
-            // Posts
-            document.querySelectorAll('[data-testid="post-container"]').forEach((post, i) => {
-                if (i < 5) {
-                    const title = post.querySelector('h3');
-                    const text = post.querySelector('[data-testid="post-content"]');
-                    data.posts.push({
-                        title: title ? title.textContent : '',
-                        text: text ? text.textContent.slice(0, 300) : '',
-                        index: i
-                    });
-                }
+            // Posts - NO LIMIT
+            document.querySelectorAll('[data-testid="post-container"]').forEach((post) => {
+                const title = post.querySelector('h3');
+                const text = post.querySelector('[data-testid="post-content"]');
+                data.posts.push({
+                    title: title ? title.textContent : '',
+                    text: text ? text.textContent.slice(0, 300) : ''
+                });
             });
             
-            // Comments
-            document.querySelectorAll('[data-testid="comment"]').forEach((comment, i) => {
-                if (i < 10) {
-                    data.comments.push({
-                        text: comment.textContent.slice(0, 200),
-                        index: i
-                    });
-                }
+            // Comments - NO LIMIT
+            document.querySelectorAll('[data-testid="comment"]').forEach((comment) => {
+                data.comments.push({
+                    text: comment.textContent.slice(0, 200)
+                });
             });
             
             return data;
@@ -138,7 +121,6 @@
                 profile: null
             };
             
-            // Profile
             const profileName = document.querySelector('[data-testid="UserName"]');
             if (profileName) {
                 data.profile = {
@@ -146,15 +128,12 @@
                 };
             }
             
-            // Tweets
-            document.querySelectorAll('[data-testid="tweet"]').forEach((tweet, i) => {
-                if (i < 5) {
-                    const text = tweet.querySelector('[data-testid="tweetText"]');
-                    data.tweets.push({
-                        text: text ? text.textContent.slice(0, 300) : '',
-                        index: i
-                    });
-                }
+            // Tweets - NO LIMIT
+            document.querySelectorAll('[data-testid="tweet"]').forEach((tweet) => {
+                const text = tweet.querySelector('[data-testid="tweetText"]');
+                data.tweets.push({
+                    text: text ? text.textContent.slice(0, 300) : ''
+                });
             });
             
             return data;
@@ -167,15 +146,12 @@
                 comments: []
             };
             
-            // Posts
-            document.querySelectorAll('.feed-shared-update-v2').forEach((post, i) => {
-                if (i < 5) {
-                    const text = post.querySelector('.feed-shared-text');
-                    data.posts.push({
-                        text: text ? text.textContent.slice(0, 300) : '',
-                        index: i
-                    });
-                }
+            // Posts - NO LIMIT
+            document.querySelectorAll('.feed-shared-update-v2').forEach((post) => {
+                const text = post.querySelector('.feed-shared-text');
+                data.posts.push({
+                    text: text ? text.textContent.slice(0, 300) : ''
+                });
             });
             
             return data;
@@ -188,15 +164,12 @@
                 comments: []
             };
             
-            // Posts
-            document.querySelectorAll('[role="article"]').forEach((post, i) => {
-                if (i < 5) {
-                    const text = post.textContent || '';
-                    data.posts.push({
-                        text: text.slice(0, 300),
-                        index: i
-                    });
-                }
+            // Posts - NO LIMIT
+            document.querySelectorAll('[role="article"]').forEach((post) => {
+                const text = post.textContent || '';
+                data.posts.push({
+                    text: text.slice(0, 300)
+                });
             });
             
             return data;
@@ -209,24 +182,18 @@
                 comments: []
             };
             
-            // Videos
-            document.querySelectorAll('[data-e2e="video-desc"]').forEach((desc, i) => {
-                if (i < 5) {
-                    data.videos.push({
-                        text: desc.textContent.slice(0, 300),
-                        index: i
-                    });
-                }
+            // Videos - NO LIMIT
+            document.querySelectorAll('[data-e2e="video-desc"]').forEach((desc) => {
+                data.videos.push({
+                    text: desc.textContent.slice(0, 300)
+                });
             });
             
-            // Comments
-            document.querySelectorAll('[data-e2e="comment-content"]').forEach((comment, i) => {
-                if (i < 10) {
-                    data.comments.push({
-                        text: comment.textContent.slice(0, 200),
-                        index: i
-                    });
-                }
+            // Comments - NO LIMIT
+            document.querySelectorAll('[data-e2e="comment-content"]').forEach((comment) => {
+                data.comments.push({
+                    text: comment.textContent.slice(0, 200)
+                });
             });
             
             return data;
@@ -239,15 +206,12 @@
                 boards: []
             };
             
-            // Pins
-            document.querySelectorAll('[data-testid="pin"]').forEach((pin, i) => {
-                if (i < 5) {
-                    const text = pin.textContent || '';
-                    data.pins.push({
-                        text: text.slice(0, 300),
-                        index: i
-                    });
-                }
+            // Pins - NO LIMIT
+            document.querySelectorAll('[data-testid="pin"]').forEach((pin) => {
+                const text = pin.textContent || '';
+                data.pins.push({
+                    text: text.slice(0, 300)
+                });
             });
             
             return data;
@@ -269,7 +233,6 @@
             const extractor = extractors[platform] || extractors.unknown;
             const data = extractor();
             
-            // Format for sending
             let content = '';
             switch(data.platform) {
                 case 'instagram':
@@ -344,7 +307,6 @@
                     content += data.text || '';
             }
             
-            // Send to background
             if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
                 chrome.runtime.sendMessage({
                     action: "streamSocialContent",
@@ -358,7 +320,6 @@
                 });
             }
             
-            // Also log for debugging
             console.log(`📤 Ruby learned from ${data.platform}`);
             
         } catch (e) {
@@ -366,12 +327,10 @@
         }
     }
 
-    // Extract on page load
     window.addEventListener("load", () => {
         setTimeout(extractPageData, 2000);
     });
 
-    // Extract on URL change (for SPA navigation)
     let lastUrl = window.location.href;
     const observer = new MutationObserver(() => {
         if (window.location.href !== lastUrl) {
@@ -381,7 +340,6 @@
     });
     observer.observe(document, { subtree: true, childList: true });
 
-    // Extract on new content (infinite scroll)
     let scrollTimeout;
     window.addEventListener('scroll', () => {
         clearTimeout(scrollTimeout);
