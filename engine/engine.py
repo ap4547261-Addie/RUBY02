@@ -124,9 +124,9 @@ class RubyEngine:
             print("⚠️ No knowledge system available")
             return None
 
-    def search_knowledge(self, query: str, limit: int = 5):
+    def search_knowledge(self, query: str, limit: int = None):
         """
-        Search Ruby's knowledge base.
+        Search Ruby's knowledge base - NO LIMIT
         """
         if self.knowledge:
             return self.knowledge.search_knowledge(query, limit)
