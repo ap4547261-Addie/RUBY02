@@ -120,6 +120,28 @@ class RubyEnergySystem:
             self._go_to_sleep()
             return None
     
+    def _sync_and_reset(self):
+        """Sync data and reset chat history for new day"""
+        try:
+            from main import conversation_history, save_chat_history
+            
+            print("💾 Ruby is syncing data during sleep...")
+            
+            # Reset chat history
+            conversation_history.clear()
+            save_chat_history()
+            
+            print("🗑️ Chat history reset for new day!")
+            
+            # Reset daily counters
+            self.conversations_today = 0
+            self.images_today = 0
+            
+            print("📊 Daily counters reset!")
+            
+        except Exception as e:
+            print(f"❌ Sync error: {e}")
+    
     def _go_to_sleep(self):
         """Ruby goes to sleep - duration based on how many keys are exhausted"""
         if self.is_sleeping:
@@ -154,6 +176,9 @@ class RubyEnergySystem:
         self.is_sleeping = True
         self.total_sleeps += 1
         self.sleep_until = datetime.now() + timedelta(hours=sleep_hours)
+        
+        # ✅ Sync and reset chat history
+        self._sync_and_reset()
         
         awake_duration = (datetime.now() - self.current_wake_start).seconds / 3600
         if awake_duration > self.longest_wake:
@@ -295,7 +320,6 @@ class BrainRouter:
                 break
         
         if not last_user_msg:
-            # Ruby says something when she wants to
             return "Hmm?"
         
         # Search local memory
