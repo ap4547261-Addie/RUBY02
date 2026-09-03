@@ -21,6 +21,11 @@ dependencies = [
     
     # WebSocket Server
     "websockets>=12.0",
+    
+    # Google APIs for Gmail & Cloud Backup
+    "google-api-python-client>=2.108.0",
+    "google-auth-oauthlib>=1.1.0",
+    "google-auth-httplib2>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -32,6 +37,9 @@ dev = [
 ]
 playwright = [
     "playwright>=1.40.0",
+]
+cloud = [
+    "google-cloud-storage>=2.14.0",  # Optional: only if you use Cloud Storage backup
 ]
 
 [tool.uv]
