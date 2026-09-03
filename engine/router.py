@@ -1,4 +1,4 @@
-# engine/router.py 
+# engine/router.py
 import os
 import json
 import time
@@ -320,24 +320,31 @@ class BrainRouter:
                 break
         
         if not last_user_msg:
-            return " "
+            return None
         
-        # 1. Try to ask a previously asked question (strip prefix)
+        # Save any question asked by the user
+        if "?" in last_user_msg:
+            hybrid_memory.save_hybrid_memory(
+                f"User asked: {last_user_msg}",
+                importance=3,
+                category="user_questions"
+            )
+        
+        # Search for relevant memory (including previous conversations)
+        memories = hybrid_memory.search_memories(last_user_msg)
+        if memories:
+            return memories[0]
+        
+        # If no memory, ask a previous question to keep conversation flowing
         questions = hybrid_memory.get_memories_by_category("user_questions")
         if questions:
             question = random.choice(questions)
-            # Remove the "User asked: " prefix if present
             if question.startswith("User asked: "):
                 question = question[len("User asked: "):]
             return question
         
-        # 2. Search for relevant recent memories
-        recent = hybrid_memory.get_recent_memories(limit=10)
-        if recent:
-            return random.choice(recent)
-        
-        # 3. Fallback: echo the user's message
-        return last_user_msg or " "
+        # No local knowledge – signal to use Gemini
+        return None
 
     def route_request(self, messages, personality=None, use_cloud_preferred=True):
         """Smart routing with Ruby's energy system and 9 keys"""
@@ -348,19 +355,19 @@ class BrainRouter:
                 if self.energy.sleep_until and datetime.now() < self.energy.sleep_until:
                     return {
                         "source": "sleeping",
-                        "response": self._call_local_brain(messages)
+                        "response": self._call_local_brain(messages) or "💤"
                     }
                 else:
                     self.energy._wake_up()
                     return {
                         "source": "waking_up",
-                        "response": self._call_local_brain(messages)
+                        "response": self._call_local_brain(messages) or "✨"
                     }
             
             self.energy._go_to_sleep()
             return {
                 "source": "going_to_sleep",
-                "response": self._call_local_brain(messages)
+                "response": self._call_local_brain(messages) or "💤"
             }
         
         status = self.energy.get_energy_status()
@@ -372,20 +379,41 @@ class BrainRouter:
                 last_user_msg = msg.get("content", "")
                 break
         
-        is_complex = self._is_complex_question(last_user_msg) if last_user_msg else False
+        # Try local brain first
+        local_response = self._call_local_brain(messages)
+        if local_response is not None:
+            return {
+                "source": "local_brain",
+                "response": local_response
+            }
         
+        # If very tired and complex, refuse
+        is_complex = self._is_complex_question(last_user_msg) if last_user_msg else False
         if is_tired and is_complex and status["status"] == "very_tired":
             return {
                 "source": "too_tired",
-                "response": self._call_local_brain(messages)
+                "response": "I'm too tired for complex questions right now. 😴"
             }
         
+        # Simple question but no local memory - try local again with more context
         if not is_complex:
+            # Try to ask a previous question
+            questions = hybrid_memory.get_memories_by_category("user_questions")
+            if questions:
+                question = random.choice(questions)
+                if question.startswith("User asked: "):
+                    question = question[len("User asked: "):]
+                return {
+                    "source": "local_brain",
+                    "response": question
+                }
+            # Fallback: echo user with curiosity
             return {
                 "source": "local_brain",
-                "response": self._call_local_brain(messages)
+                "response": f"Tell me more about that."
             }
         
+        # Complex question - try Gemini with chat keys
         if use_cloud_preferred:
             chat_key = self.energy.get_chat_key()
             
@@ -393,7 +421,7 @@ class BrainRouter:
                 self.energy._go_to_sleep()
                 return {
                     "source": "going_to_sleep",
-                    "response": self._call_local_brain(messages)
+                    "response": self.energy.get_sleep_message()
                 }
             
             self.cloud_api_key = chat_key
@@ -416,6 +444,18 @@ class BrainRouter:
                         
                         self.energy.conversations_today += 1
                         
+                        # Save the interaction as a memory for future local use
+                        try:
+                            from main import hybrid_memory
+                            hybrid_memory.save_hybrid_memory(
+                                f"User asked: {last_user_msg} - Ruby replied: {response}",
+                                importance=3,
+                                category="conversation_patterns"
+                            )
+                        except:
+                            pass
+                        
+                        # Check if Ruby is now tired
                         if self.energy.get_energy_status()["energy"] < 20:
                             response += "\n\nUgh, that took a lot out of me... I'm getting tired."
                         
@@ -452,7 +492,7 @@ class BrainRouter:
                     
                     return {
                         "source": "cloud_error_fallback",
-                        "response": self._call_local_brain(messages)
+                        "response": self._call_local_brain(messages) or "I'm having trouble thinking right now. 😕"
                     }
                 
                 except Exception as e:
@@ -462,18 +502,19 @@ class BrainRouter:
                     
                     return {
                         "source": "cloud_error_fallback",
-                        "response": self._call_local_brain(messages)
+                        "response": self._call_local_brain(messages) or "I'm having trouble thinking right now. 😕"
                     }
             
             self.energy._go_to_sleep()
             return {
                 "source": "going_to_sleep",
-                "response": self._call_local_brain(messages)
+                "response": self.energy.get_sleep_message()
             }
         
+        # Fallback to local brain
         return {
             "source": "local",
-            "response": self._call_local_brain(messages)
+            "response": self._call_local_brain(messages) or "I'm not sure what to say. 😅"
         }
     
     def _is_complex_question(self, text):
