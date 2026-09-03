@@ -1,4 +1,4 @@
-# engine/router.py
+# engine/router.py - 
 import os
 import json
 import time
@@ -7,7 +7,7 @@ import threading
 import http.client
 import urllib.request
 import urllib.error
-from datetime import datetime, timedelta  
+from datetime import datetime, timedelta
 from collections import deque
 import random
 
@@ -331,11 +331,10 @@ class BrainRouter:
                 category="user_questions"
             )
         
-        # NO LIMIT - ALWAYS ask a question if there are any
-        questions = hybrid_memory.search_memories("User asked")
+        # ✅ FIX: Use get_memories_by_category to get a list of questions
+        questions = hybrid_memory.get_memories_by_category("user_questions")
         if questions:
             question = random.choice(questions)
-            question = question.replace("User asked: ", "")
             return question
         
         if memories:
