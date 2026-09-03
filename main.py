@@ -329,11 +329,10 @@ def main_app_ui(page: ft.Page):
     page.padding = 16
     page.vertical_alignment = ft.MainAxisAlignment.END
 
-    # Chat history list
     chat_list = ft.ListView(expand=True, spacing=12, auto_scroll=True)
     chat_list_ref = chat_list
 
-    # Load and render past messages (same as before)
+    # Load chat history
     conversation_history = load_chat_history()
     for msg in conversation_history:
         sender_name = "Addie" if msg["role"] == "user" else "Ruby"
@@ -351,7 +350,6 @@ def main_app_ui(page: ft.Page):
         )
         chat_list.controls.append(bubble)
 
-    # Status label
     status_label = ft.Text(
         "✨ Checking status...",
         size=11,
@@ -360,7 +358,6 @@ def main_app_ui(page: ft.Page):
     )
     status_label_ref = status_label
 
-    # User input field
     user_input = ft.TextField(
         hint_text="Say something to Ruby or ask her to draw...",
         border_color="#3A3A46",
@@ -369,27 +366,26 @@ def main_app_ui(page: ft.Page):
         color=ft.Colors.WHITE,
         expand=True,
         border_radius=8,
-        on_submit=lambda e: send_message(e.control.value),  # Enter key support
+        on_submit=lambda e: send_message(e.control.value),
     )
 
-    # ====== FIX: SEND BUTTON WITH ICON ======
+    # ====== FIXED: NO ICON CONSTANTS ======
     send_button = ft.IconButton(
-    icon=ft.icons.ARROW_FORWARD,          
-    icon_color=ft.Colors.CYAN_400,
-    tooltip="Send message",
-    on_click=lambda e: send_message(user_input.value),
-)
-    # Layout: input row
+        content=ft.Text("Send", color=ft.Colors.CYAN_400, weight=ft.FontWeight.BOLD),
+        tooltip="Send message",
+        on_click=lambda e: send_message(user_input.value),
+        style=ft.ButtonStyle(
+            shape=ft.RoundedRectangleBorder(radius=8),
+            bgcolor=ft.Colors.TRANSPARENT,
+        ),
+    )
+
     input_row = ft.Row(
-        controls=[
-            user_input,
-            send_button,
-        ],
+        controls=[user_input, send_button],
         spacing=10,
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # Add all controls to the page
     page.add(
         chat_list,
         ft.Divider(height=2, color="#2A2A36"),
@@ -397,20 +393,14 @@ def main_app_ui(page: ft.Page):
         input_row,
     )
 
-    # Define send_message after UI is built (or before, but needs access to globals)
     def send_message(text):
         if not text or not text.strip():
             return
-        # Clear input
         user_input.value = ""
         user_input.update()
-        # Process the message (same as your process_generation logic)
         process_generation(text.strip())
 
-    # Store send_message for later use
     page.send_message = send_message
-
-    # Initial status update
     update_ruby_status()
     page.update() 
 
