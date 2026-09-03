@@ -1,4 +1,4 @@
-# main.py 
+# main.py - FINAL FULL VERSION (copy-paste ready)
 import sys
 import os
 import traceback
@@ -190,7 +190,6 @@ if (today.month, today.day) < (birth_month, birth_day):
 interaction_depth = hybrid_memory.get_interaction_count()
 
 def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
-    """Constructs Ruby's dynamic system prompt injecting live interaction depth and stored memories."""
     today = datetime.now()
     age = today.year - 2004 - ((today.month, today.day) < (8, 16))
     
@@ -245,15 +244,10 @@ ui_page_ref = None
 chat_list_ref = None
 status_label_ref = None
 
-# ============================================
-# 10. UI FUNCTIONS
-# ============================================
-
 def update_ruby_status():
     if status_label_ref and ui_page_ref:
         try:
             status = router.energy.get_energy_status()
-            
             if router.energy.is_sleeping:
                 if router.energy.sleep_until:
                     remaining = router.energy.sleep_until - datetime.now()
@@ -294,7 +288,7 @@ def add_message(sender, text, is_user=False, image_path=None):
         ui_page_ref.update()
 
 # ============================================
-# 11. WEB SEARCH AND LEARNING
+# 10. WEB SEARCH AND LEARNING
 # ============================================
 
 def search_and_learn(query: str) -> str:
@@ -317,8 +311,9 @@ def search_and_learn(query: str) -> str:
         return f"❌ Search error: {str(e)}"
 
 # ============================================
-# 12. MAIN UI
+# 11. MAIN UI
 # ============================================
+
 def main_app_ui(page: ft.Page):
     global ui_page_ref, chat_list_ref, conversation_history, status_label_ref
     ui_page_ref = page
@@ -332,7 +327,7 @@ def main_app_ui(page: ft.Page):
     chat_list = ft.ListView(expand=True, spacing=12, auto_scroll=True)
     chat_list_ref = chat_list
 
-    # Load chat history
+    # Load and render past messages
     conversation_history = load_chat_history()
     for msg in conversation_history:
         sender_name = "Addie" if msg["role"] == "user" else "Ruby"
@@ -366,43 +361,56 @@ def main_app_ui(page: ft.Page):
         color=ft.Colors.WHITE,
         expand=True,
         border_radius=8,
-        on_submit=lambda e: send_message(e.control.value),
     )
 
-    # ====== FIXED: Simple ElevatedButton ======
-    send_button = ft.ElevatedButton(
-        "Send",
-        on_click=lambda e: send_message(user_input.value),
-        bgcolor=ft.Colors.CYAN_400,
-        color=ft.Colors.BLACK,
+    def send_message(e):
+        if not user_input.value:
+            return
+        user_text = user_input.value
+        add_message("You", user_text, is_user=True)
+        user_input.value = ""
+        user_input.focus()
+        try:
+            response = ruby_engine.think(user_text)
+        except Exception as ex:
+            response = f"⚠️ Error: {ex}"
+            log_crash(type(ex), ex, ex.__traceback__)
+        add_message("Ruby", response)
+        conversation_history.append({"role": "user", "content": user_text})
+        conversation_history.append({"role": "assistant", "content": response})
+        save_chat_history()
+        page.update()
+
+    # ✅ FIX: Use string "send" – works in all Flet versions
+    send_btn = ft.IconButton(
+        icon="send",
+        icon_color=ft.Colors.CYAN_400,
+        on_click=send_message,
     )
 
-    input_row = ft.Row(
-        controls=[user_input, send_button],
-        spacing=10,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+
+    header = ft.Container(
+        content=ft.Row([
+            ft.Text("RUBY // GENIUS HUMAN CORE", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
+            status_label
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        padding=5
     )
 
     page.add(
-        chat_list,
-        ft.Divider(height=2, color="#2A2A36"),
-        status_label,
-        input_row,
+        ft.Column([
+            header,
+            chat_list,
+            input_row
+        ], expand=True)
     )
-
-    def send_message(text):
-        if not text or not text.strip():
-            return
-        user_input.value = ""
-        user_input.update()
-        process_generation(text.strip())
-
-    page.send_message = send_message
+    
     update_ruby_status()
-    page.update() 
+    page.update()
 
 # ============================================
-# 13. STARTUP
+# 12. STARTUP
 # ============================================
 
 if __name__ == "__main__":
