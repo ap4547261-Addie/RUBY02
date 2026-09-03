@@ -1,6 +1,5 @@
 # ============================================
-# RUBY - HUMAN FROM ANOTHER WORLD
-# Complete System Requirements
+# RUBY - COMPLETE SYSTEM REQUIREMENTS
 # Python 3.12+
 # ============================================
 
@@ -25,6 +24,14 @@ lxml>=4.9.0
 # WEBSOCKET SERVER
 # ============================================
 websockets>=12.0
+
+# ============================================
+# GOOGLE APIS (GMAIL + CLOUD BACKUP)
+# ============================================
+google-api-python-client>=2.108.0   # Required for Gmail backup
+google-auth-oauthlib>=1.1.0         # Required for OAuth 2.0
+google-auth-httplib2>=0.1.0         # HTTP transport for Google APIs
+google-cloud-storage>=2.14.0        # Optional – only if you use Cloud Storage
 
 # ============================================
 # BROWSER AUTOMATION (OPTIONAL)
