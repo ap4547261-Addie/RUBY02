@@ -471,7 +471,7 @@ def main_app_ui(page: ft.Page):
         threading.Thread(target=process_generation, args=(text,), daemon=True).start()
 
     send_btn = ft.IconButton(
-        icon=ft.icons.SEND,
+        icon="send",
         icon_color=ft.Colors.CYAN_400,
         on_click=send_click,
     )
