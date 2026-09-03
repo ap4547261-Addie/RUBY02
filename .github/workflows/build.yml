@@ -50,27 +50,33 @@ jobs:
     
     - name: Generate Config and Build APK
       env:
-        # Chat Keys (1-4) - For complex questions
+        # Chat Keys (1-4)
         GEMINI_API_KEY1: ${{ secrets.GEMINI_API_KEY1 }}
         GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
         GEMINI_API_KEY3: ${{ secrets.GEMINI_API_KEY3 }}
         GEMINI_API_KEY4: ${{ secrets.GEMINI_API_KEY4 }}
-        # Image Keys (5-9) - For image generation
+        # Image Keys (5-9)
         GEMINI_API_KEY5: ${{ secrets.GEMINI_API_KEY5 }}
         GEMINI_API_KEY6: ${{ secrets.GEMINI_API_KEY6 }}
         GEMINI_API_KEY7: ${{ secrets.GEMINI_API_KEY7 }}
         GEMINI_API_KEY8: ${{ secrets.GEMINI_API_KEY8 }}
         GEMINI_API_KEY9: ${{ secrets.GEMINI_API_KEY9 }}
-        # Fallback (keep for compatibility)
+        # Fallback
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         # Pinecone
         PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
         PINECONE_INDEX_HOST: ${{ secrets.PINECONE_INDEX_HOST }}
+        # ============================================
+        # BACKUP CREDENTIALS (Gmail + Cloud)
+        # ============================================
+        GMAIL_CREDENTIANLS_JSON: ${{ secrets.GMAIL_CREDENTIANLS_JSON }}
+        # Optionally, add service account for Cloud Storage
+        GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
         FLET_SUPPRESS_PROMPTS: "true"
       run: |
-        # Create config.py with all 9 keys
+        # ---- 1. Create config.py for Gemini ----
         cat > config.py << 'EOF'
-        # Gemini API Keys (1-4 for chat, 5-9 for images)
+        # Gemini API Keys
         GEMINI_API_KEY1 = "$GEMINI_API_KEY1"
         GEMINI_API_KEY2 = "$GEMINI_API_KEY2"
         GEMINI_API_KEY3 = "$GEMINI_API_KEY3"
@@ -84,18 +90,40 @@ jobs:
         PINECONE_API_KEY = "$PINECONE_API_KEY"
         PINECONE_INDEX_HOST = "$PINECONE_INDEX_HOST"
         EOF
-  
-        # Clean build directory
+
+        # ---- 2. Create credentials.json for Gmail backup ----
+        if [ -n "$GMAIL_CREDENTIANLS_JSON" ]; then
+          echo "$GMAIL_CREDENTIANLS_JSON" > credentials.json
+          echo "✅ credentials.json created from secret."
+        else
+          echo "⚠️ GMAIL_CREDENTIANLS_JSON not set; Gmail backup will be disabled."
+        fi
+
+        # ---- 3. Create service_account.json for Cloud Storage (optional) ----
+        if [ -n "$GCLOUD_SERVICE_ACCOUNT_JSON" ]; then
+          echo "$GCLOUD_SERVICE_ACCOUNT_JSON" > service_account.json
+          echo "✅ service_account.json created from secret."
+        else
+          echo "ℹ️ GCLOUD_SERVICE_ACCOUNT_JSON not set; Cloud Storage will be disabled."
+        fi
+
+        # ---- 4. Clean and build ----
         rm -rf build/ dist/ .venv/ venv/ __pycache__/
         rm -f RUBY_03.png
-        
-        # Verify config was created
+
+        # Verify files exist
         cat config.py
-        
+        if [ -f credentials.json ]; then
+          echo "✅ credentials.json present."
+        fi
+        if [ -f service_account.json ]; then
+          echo "✅ service_account.json present."
+        fi
+
         # Compile Python files
         python3 -m compileall . || exit 1
-        
-        # Build APK with environment variables
+
+        # Build APK
         flet build apk --python-version 3.12 --arch arm64-v8a --yes
         
     - name: Upload APK Artifact
