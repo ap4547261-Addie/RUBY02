@@ -1,4 +1,4 @@
-# main.py - FULL WORKING VERSION (with TextButton)
+# main.py - FULL WORKING VERSION WITH BACKUP
 import sys
 import os
 import traceback
@@ -56,6 +56,81 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 
 # ============================================
+# BACKUP SYSTEM (Gmail + Cloud)
+# ============================================
+
+# Write credentials from secret (if available)
+def ensure_credentials():
+    creds_content = os.getenv("GMAIL_CREDENTIANLS_JSON")  # Exact secret name
+    if creds_content:
+        creds_path = os.path.join(STORAGE_DIR, "credentials.json")
+        if not os.path.exists(creds_path):
+            try:
+                json.loads(creds_content)
+                with open(creds_path, "w") as f:
+                    f.write(creds_content)
+                print("✅ Credentials written from secret.")
+            except Exception as e:
+                print(f"⚠️ Invalid GMAIL_CREDENTIANLS_JSON: {e}")
+        return creds_path
+    else:
+        if os.path.exists("credentials.json"):
+            return "credentials.json"
+    return None
+
+# Initialize Gmail backup
+from tools.gmail_backup import GmailBackup
+gmail = None
+credentials_file = ensure_credentials()
+if credentials_file:
+    try:
+        gmail = GmailBackup(
+            creds_file=credentials_file,
+            token_file=os.path.join(STORAGE_DIR, "token_gmail.pickle")
+        )
+        print("📧 Gmail backup ready.")
+    except Exception as e:
+        print(f"⚠️ Gmail init error: {e}")
+
+# Initialize Cloud Storage backup (requires service_account.json)
+from tools.cloud_backup import CloudBackup
+cloud = None
+# Check if service_account.json exists (local or from secret)
+cloud_creds_local = "service_account.json"
+cloud_creds_storage = os.path.join(STORAGE_DIR, "service_account.json")
+if os.path.exists(cloud_creds_local):
+    # Copy to storage dir if not already there
+    if not os.path.exists(cloud_creds_storage):
+        import shutil
+        shutil.copy(cloud_creds_local, cloud_creds_storage)
+    try:
+        cloud = CloudBackup(
+            bucket_name="ruby-backup-bucket",  # Change to your bucket name
+            credentials_path=cloud_creds_storage
+        )
+        print("☁️ Cloud backup ready.")
+    except Exception as e:
+        print(f"⚠️ Cloud init error: {e}")
+
+# Restore function
+def restore_from_backups():
+    restored = False
+    if gmail:
+        if gmail.restore_db(MEMORY_DB, "ruby_memory.db"):
+            restored = True
+        if gmail.restore_db(KNOWLEDGE_DB, "ruby_knowledge.db"):
+            restored = True
+    if not restored and cloud:
+        if cloud.restore_latest(MEMORY_DB, "ruby_memory.db"):
+            restored = True
+        if cloud.restore_latest(KNOWLEDGE_DB, "ruby_knowledge.db"):
+            restored = True
+    if restored:
+        print("✅ Memories restored from backup.")
+    else:
+        print("ℹ️ No backup found, starting fresh.")
+
+# ============================================
 # 1. INITIALIZE CORE BRAIN MODULES
 # ============================================
 
@@ -94,7 +169,14 @@ except Exception as e:
     print(f"⚠️ Memory seeding failed: {e}")
 
 # ============================================
-# 4. INITIALIZE LEARNING SYSTEMS (LOCAL-ONLY)
+# 4. RESTORE FROM BACKUP IF MEMORY IS EMPTY
+# ============================================
+
+if hybrid_memory.get_interaction_count() == 0:
+    restore_from_backups()
+
+# ============================================
+# 5. INITIALIZE LEARNING SYSTEMS (LOCAL-ONLY)
 # ============================================
 
 data_ingestion = DataIngestion(db_path=KNOWLEDGE_DB)
@@ -110,7 +192,7 @@ instagram_connector = InstagramConnector(hybrid_memory)
 print("📸 Instagram Connector initialized (0 API calls)")
 
 # ============================================
-# 5. INITIALIZE RUBY ENGINE
+# 6. INITIALIZE RUBY ENGINE
 # ============================================
 
 ruby_engine = RubyEngine(
@@ -124,7 +206,7 @@ ruby_engine = RubyEngine(
 print("🧠 RubyEngine initialized!")
 
 # ============================================
-# 6. INITIALIZE WEBSOCKET SERVER
+# 7. INITIALIZE WEBSOCKET SERVER
 # ============================================
 
 websocket_handler = WebSocketHandler(
@@ -156,7 +238,7 @@ ws_thread.start()
 print("🔌 WebSocket server running on ws://localhost:8765")
 
 # ============================================
-# 7. PERSISTENT STORAGE - CHAT HISTORY
+# 8. PERSISTENT STORAGE - CHAT HISTORY
 # ============================================
 
 def load_chat_history():
@@ -176,7 +258,7 @@ def save_chat_history():
         print(f"Failed to save history: {e}")
 
 # ============================================
-# 8. RUBY'S PERSONALITY PROMPT
+# 9. RUBY'S PERSONALITY PROMPT
 # ============================================
 
 today = datetime.now()
@@ -237,7 +319,7 @@ conversation_history = load_chat_history()
 print(f"📜 Loaded {len(conversation_history)} chat messages")
 
 # ============================================
-# 9. UI STATE
+# 10. UI STATE
 # ============================================
 
 ui_page_ref = None
@@ -288,7 +370,7 @@ def add_message(sender, text, is_user=False, image_path=None):
         ui_page_ref.update()
 
 # ============================================
-# 10. WEB SEARCH AND LEARNING
+# 11. WEB SEARCH AND LEARNING
 # ============================================
 
 def search_and_learn(query: str) -> str:
@@ -311,7 +393,7 @@ def search_and_learn(query: str) -> str:
         return f"❌ Search error: {str(e)}"
 
 # ============================================
-# 11. MAIN UI
+# 12. MAIN UI
 # ============================================
 
 def main_app_ui(page: ft.Page):
@@ -410,7 +492,7 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 # ============================================
-# 12. STARTUP
+# 13. STARTUP
 # ============================================
 
 if __name__ == "__main__":
