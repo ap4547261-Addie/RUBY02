@@ -1,4 +1,4 @@
-# engine/vector_store.py
+# engine/vector_store.py - 
 import os
 import sqlite3
 import json
@@ -333,6 +333,40 @@ class HybridMemorySystem:
         except Exception as e:
             print(f"Stats error: {e}")
             return {}
+
+    # ============================================
+    # NEW METHODS ADDED FOR RubyEngine compatibility
+    # ============================================
+
+    def get_state(self) -> dict:
+        """Get current state from stats table (for RubyEngine)"""
+        conn = sqlite3.connect(self.sqlite_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT key, value FROM stats")
+        rows = cursor.fetchall()
+        conn.close()
+        state = {}
+        for key, value in rows:
+            if key in ['interaction_count', 'total_memories', 'important_memories', 'conversations_today']:
+                state[key] = int(value) if value else 0
+            else:
+                state[key] = value
+        return state
+
+    def update_state(self, new_state: dict):
+        """Update state in stats table (for RubyEngine)"""
+        conn = sqlite3.connect(self.sqlite_path)
+        cursor = conn.cursor()
+        for key, value in new_state.items():
+            cursor.execute("""
+                INSERT INTO stats (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
+            """, (key, str(value), str(value)))
+        conn.commit()
+        conn.close()
+
+    # ============================================
 
     def export_memories(self, filepath: str = "ruby_memories_export.json"):
         """Export all memories to JSON"""
