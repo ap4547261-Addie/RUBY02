@@ -319,7 +319,6 @@ def search_and_learn(query: str) -> str:
 # ============================================
 # 12. MAIN UI
 # ============================================
-
 def main_app_ui(page: ft.Page):
     global ui_page_ref, chat_list_ref, conversation_history, status_label_ref
     ui_page_ref = page
@@ -330,10 +329,11 @@ def main_app_ui(page: ft.Page):
     page.padding = 16
     page.vertical_alignment = ft.MainAxisAlignment.END
 
+    # Chat history list
     chat_list = ft.ListView(expand=True, spacing=12, auto_scroll=True)
     chat_list_ref = chat_list
 
-    # Load and render past messages
+    # Load and render past messages (same as before)
     conversation_history = load_chat_history()
     for msg in conversation_history:
         sender_name = "Addie" if msg["role"] == "user" else "Ruby"
@@ -351,6 +351,7 @@ def main_app_ui(page: ft.Page):
         )
         chat_list.controls.append(bubble)
 
+    # Status label
     status_label = ft.Text(
         "✨ Checking status...",
         size=11,
@@ -359,6 +360,7 @@ def main_app_ui(page: ft.Page):
     )
     status_label_ref = status_label
 
+    # User input field
     user_input = ft.TextField(
         hint_text="Say something to Ruby or ask her to draw...",
         border_color="#3A3A46",
@@ -367,135 +369,51 @@ def main_app_ui(page: ft.Page):
         color=ft.Colors.WHITE,
         expand=True,
         border_radius=8,
+        on_submit=lambda e: send_message(e.control.value),  # Enter key support
     )
 
-    def process_generation(text):
-        try:
-            # Check if Ruby is available
-            if not router.energy.is_available():
-                if router.energy.is_sleeping:
-                    if router.energy.sleep_until and datetime.now() < router.energy.sleep_until:
-                        add_message("Ruby", "I'm sleeping... Talk to me tomorrow! 💤")
-                        return
-                    else:
-                        router.energy._wake_up()
-                        wake_msg = router.energy.get_wake_message()
-                        add_message("Ruby", f"{wake_msg}\n\nWhat did I miss?")
-                        update_ruby_status()
-                        return
-                if not router.energy.is_available():
-                    router.energy._go_to_sleep()
-                    add_message("Ruby", router.energy.get_sleep_message())
-                    update_ruby_status()
-                    return
-
-            current_depth = hybrid_memory.increment_interaction()
-            
-            # Check if this is a search/learn request
-            learn_keywords = ["learn about", "search for", "find out", "look up", "research", "teach me about"]
-            is_learn_request = any(keyword in text.lower() for keyword in learn_keywords)
-            
-            if is_learn_request:
-                topic = text
-                for keyword in learn_keywords:
-                    topic = topic.replace(keyword, "").strip()
-                if topic:
-                    add_message("Ruby", f"🔍 Let me learn about '{topic}'...")
-                    page.update()
-                    response = search_and_learn(topic)
-                    add_message("Ruby", response)
-                    conversation_history.append({"role": "user", "content": text})
-                    conversation_history.append({"role": "assistant", "content": response})
-                    save_chat_history()
-                    return
-
-            # Normal conversation flow - Use RubyEngine
-            reply = ruby_engine.think(text)
-            
-            if router.energy.is_sleeping:
-                add_message("Ruby", reply)
-                add_message("Ruby", f"\n💤 {router.energy.get_sleep_message()}")
-                update_ruby_status()
-                return
-
-            conversation_history.append({"role": "user", "content": text})
-            conversation_history.append({"role": "assistant", "content": reply})
-            save_chat_history()
-
-            # Memory saving tags
-            if "[SAVE_MEMORY:" in reply:
-                parts = reply.split("[SAVE_MEMORY:")
-                clean_reply = parts[0].strip()
-                memory_fact = parts[1].replace("]", "").strip()
-                hybrid_memory.save_hybrid_memory(memory_fact)
-                reply = f"{clean_reply}\n\n*(Memory Saved: {memory_fact})*"
-
-            # Image generation tags
-            generated_img_path = None
-            if "[GENERATE_IMAGE:" in reply:
-                parts = reply.split("[GENERATE_IMAGE:")
-                clean_reply = parts[0].strip()
-                img_prompt = parts[1].replace("]", "").strip()
-                reply = clean_reply
-                add_message("Ruby", "Hold on, sketching this out...")
-                page.update()
-                phone_camera_prompt = (
-                    "Raw unfiltered smartphone photo, taken on a phone front camera, "
-                    "natural skin texture with visible pores, casual everyday lighting, "
-                    "slight digital noise, unpolished candid snapshot, realistic amateur framing, "
-                    f"no studio lighting, {img_prompt}"
-                )
-                generated_img_path = brain_core.generate_image(phone_camera_prompt)
-
-            add_message("Ruby", reply, image_path=generated_img_path)
-            update_ruby_status()
-            
-            status = router.energy.get_energy_status()
-            if status.get("energy", 100) < 20:
-                add_message("Ruby", "\nUgh, I'm getting really tired... Might need to sleep soon. 😴")
-            
-        except Exception as ex:
-            error_msg = f"Ugh, connection dropped... ({str(ex)})"
-            add_message("Ruby", error_msg)
-            print(f"Error: {ex}")
-            log_crash(type(ex), ex, ex.__traceback__)
-
-    def send_click(e):
-        text = user_input.value.strip()
-        if not text:
-            return
-        add_message("Addie", text, is_user=True)
-        user_input.value = ""
-        user_input.focus()
-        page.update()
-        threading.Thread(target=process_generation, args=(text,), daemon=True).start()
-
-    send_btn = ft.IconButton(
-        icon="send",
+    # ====== FIX: SEND BUTTON WITH ICON ======
+    send_button = ft.IconButton(
+        icon=ft.icons.SEND,               # REQUIRED: set icon
         icon_color=ft.Colors.CYAN_400,
-        on_click=send_click,
+        tooltip="Send message",
+        on_click=lambda e: send_message(user_input.value),
     )
 
-    input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-
-    header = ft.Container(
-        content=ft.Row([
-            ft.Text("RUBY // GENIUS HUMAN CORE", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
-            status_label
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-        padding=5
+    # Layout: input row
+    input_row = ft.Row(
+        controls=[
+            user_input,
+            send_button,
+        ],
+        spacing=10,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
+    # Add all controls to the page
     page.add(
-        ft.Column([
-            header,
-            chat_list,
-            input_row
-        ], expand=True)
+        chat_list,
+        ft.Divider(height=2, color="#2A2A36"),
+        status_label,
+        input_row,
     )
-    
+
+    # Define send_message after UI is built (or before, but needs access to globals)
+    def send_message(text):
+        if not text or not text.strip():
+            return
+        # Clear input
+        user_input.value = ""
+        user_input.update()
+        # Process the message (same as your process_generation logic)
+        process_generation(text.strip())
+
+    # Store send_message for later use
+    page.send_message = send_message
+
+    # Initial status update
     update_ruby_status()
-    page.update()
+    page.update() 
 
 # ============================================
 # 13. STARTUP
