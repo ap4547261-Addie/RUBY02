@@ -369,16 +369,12 @@ def main_app_ui(page: ft.Page):
         on_submit=lambda e: send_message(e.control.value),
     )
 
-    # ====== FIXED: Use ElevatedButton (no icons) ======
+    # ====== FIXED: Simple ElevatedButton ======
     send_button = ft.ElevatedButton(
         "Send",
         on_click=lambda e: send_message(user_input.value),
         bgcolor=ft.Colors.CYAN_400,
         color=ft.Colors.BLACK,
-        style=ft.ButtonStyle(
-            shape=ft.RoundedRectangleBorder(radius=8),
-            padding=ft.padding.symmetric(horizontal=16, vertical=10),
-        ),
     )
 
     input_row = ft.Row(
