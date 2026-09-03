@@ -1,4 +1,4 @@
-# engine/router.py - 
+# engine/router.py 
 import os
 import json
 import time
@@ -322,25 +322,22 @@ class BrainRouter:
         if not last_user_msg:
             return " "
         
-        memories = hybrid_memory.search_memories(last_user_msg)
-        
-        if "?" in last_user_msg:
-            hybrid_memory.save_hybrid_memory(
-                f"User asked: {last_user_msg}",
-                importance=3,
-                category="user_questions"
-            )
-        
-        # ✅ FIX: Use get_memories_by_category to get a list of questions
+        # 1. Try to ask a previously asked question (strip prefix)
         questions = hybrid_memory.get_memories_by_category("user_questions")
         if questions:
             question = random.choice(questions)
+            # Remove the "User asked: " prefix if present
+            if question.startswith("User asked: "):
+                question = question[len("User asked: "):]
             return question
         
-        if memories:
-            return memories[0]
-        else:
-            return last_user_msg or " "
+        # 2. Search for relevant recent memories
+        recent = hybrid_memory.get_recent_memories(limit=10)
+        if recent:
+            return random.choice(recent)
+        
+        # 3. Fallback: echo the user's message
+        return last_user_msg or " "
 
     def route_request(self, messages, personality=None, use_cloud_preferred=True):
         """Smart routing with Ruby's energy system and 9 keys"""
