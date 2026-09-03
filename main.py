@@ -1,42 +1,39 @@
-# main.py - CRASH-PROOF VERSION WITH ERROR LOGGING
+# main.py - FULL CRASH-PROOF VERSION
 import sys
 import os
 import traceback
 import threading
+import json
+import asyncio
 from datetime import datetime
 
+import flet as ft
+
 # ============================================
-# CRITICAL: CRASH LOGGING (MUST BE FIRST!)
+# CRASH LOGGING (MUST BE FIRST)
 # ============================================
 
 CRASH_LOG_PATH = os.path.join(os.getenv("FLET_APP_STORAGE_DATA", "."), "ruby_crash.txt")
 
 def init_crash_logging():
-    """Initialize crash logging"""
     try:
         os.makedirs(os.path.dirname(CRASH_LOG_PATH) or ".", exist_ok=True)
         with open(CRASH_LOG_PATH, "a", encoding="utf-8") as f:
             f.write(f"\n{'='*60}\n[APP START] {datetime.now().isoformat()}\n{'='*60}\n")
-        print(f"✅ Crash logger initialized: {CRASH_LOG_PATH}")
+        print(f"✅ Crash logger: {CRASH_LOG_PATH}")
     except Exception as e:
         print(f"⚠️ Could not init crash logger: {e}")
 
-def log_crash(exc_type, exc_value, exc_traceback):
-    """Log any unhandled exception"""
-    error_msg = f"\n{'='*60}\n[CRASH] {datetime.now().isoformat()}\n{'='*60}\n"
-    error_msg += f"Type: {exc_type.__name__}\n"
-    error_msg += f"Error: {exc_value}\n"
-    error_msg += "Traceback:\n"
-    error_msg += "".join(traceback.format_tb(exc_traceback))
-    error_msg += f"{'='*60}\n"
-    
+def log_crash(exc_type, exc_value, exc_tb):
+    error = f"\n{'='*60}\n[CRASH] {datetime.now().isoformat()}\n{'='*60}\n"
+    error += f"Type: {exc_type.__name__}\nError: {exc_value}\nTraceback:\n"
+    error += "".join(traceback.format_tb(exc_tb)) + f"{'='*60}\n"
     try:
         with open(CRASH_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(error_msg)
+            f.write(error)
     except:
         pass
-    
-    print(error_msg, file=sys.stderr)
+    print(error, file=sys.stderr)
 
 init_crash_logging()
 sys.excepthook = log_crash
@@ -45,12 +42,7 @@ sys.excepthook = log_crash
 # SAFE IMPORTS WITH FALLBACKS
 # ============================================
 
-import sqlite3
-import json
-import asyncio
-import flet as ft
-
-# Safe import config
+# Config
 try:
     import config
     GEMINI_API_KEY = getattr(config, "GEMINI_API_KEY", "")
@@ -59,11 +51,9 @@ try:
 except Exception as e:
     print(f"❌ Config import failed: {e}")
     log_crash(type(e), e, e.__traceback__)
-    GEMINI_API_KEY = ""
-    PINECONE_API_KEY = ""
-    PINECONE_INDEX_HOST = ""
+    GEMINI_API_KEY = PINECONE_API_KEY = PINECONE_INDEX_HOST = ""
 
-# Safe import engine.router (removes circular import)
+# Engine modules
 try:
     from engine.router import BrainRouter
     print("✅ BrainRouter imported")
@@ -78,7 +68,6 @@ except Exception as e:
                 'sleep_until': None
             })()
 
-# Safe import engine.brain
 try:
     from engine.brain import RubyBrainCore
     print("✅ RubyBrainCore imported")
@@ -88,7 +77,6 @@ except Exception as e:
     class RubyBrainCore:
         def __init__(self, **kwargs): pass
 
-# Safe import engine.vector_store
 try:
     from engine.vector_store import HybridMemorySystem
     print("✅ HybridMemorySystem imported")
@@ -101,7 +89,6 @@ except Exception as e:
         def get_interaction_count(self): return 0
         def search_memories(self, query): return []
 
-# Safe import engine.engine
 try:
     from engine.engine import RubyEngine
     print("✅ RubyEngine imported")
@@ -110,8 +97,9 @@ except Exception as e:
     log_crash(type(e), e, e.__traceback__)
     class RubyEngine:
         def __init__(self, **kwargs): pass
+        def think(self, msg): return "I'm Ruby, your virtual friend."
 
-# Safe import tools
+# Tools
 try:
     from tools.data_ingestion import DataIngestion
     print("✅ DataIngestion imported")
@@ -129,7 +117,6 @@ except Exception as e:
     print(f"⚠️ WebLearner import failed: {e}")
     class WebLearner:
         def __init__(self, *args, **kwargs): pass
-        def search_web_and_learn(self, query): return {"success": False}
 
 try:
     from tools.video_learner import VideoLearner
@@ -164,16 +151,17 @@ except Exception as e:
         def __init__(self, **kwargs): pass
         async def start_server(self): pass
 
-# Safe import personality
+# Personality
 try:
-    from personality.ruby import RUBY_PROMPT
-    print("✅ RUBY_PROMPT imported")
+    from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
+    print("✅ RUBY_PROMPT and CORE_MEMORIES imported")
 except Exception as e:
-    print(f"⚠️ RUBY_PROMPT import failed: {e}")
+    print(f"⚠️ Personality import failed: {e}")
     RUBY_PROMPT = "You are Ruby, a helpful assistant."
+    CORE_MEMORIES = []
 
 # ============================================
-# SAFE STORAGE SETUP
+# SAFE STORAGE SETUP (Android-friendly)
 # ============================================
 
 STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
@@ -213,6 +201,15 @@ except Exception as e:
     print(f"❌ Memory init failed: {e}")
     log_crash(type(e), e, e.__traceback__)
     hybrid_memory = HybridMemorySystem()
+
+# Seed Ruby's core memories
+try:
+    if CORE_MEMORIES:
+        for memory in CORE_MEMORIES:
+            hybrid_memory.save_hybrid_memory(memory, importance=3, category="core_personality")
+        print(f"✅ Seeded {len(CORE_MEMORIES)} core memories")
+except Exception as e:
+    print(f"⚠️ Memory seeding failed: {e}")
 
 try:
     data_ingestion = DataIngestion(db_path=KNOWLEDGE_DB)
@@ -255,10 +252,10 @@ try:
 except Exception as e:
     print(f"❌ Ruby engine init failed: {e}")
     log_crash(type(e), e, e.__traceback__)
-    ruby_engine = None
+    ruby_engine = RubyEngine()
 
 # ============================================
-# INITIALIZE WEBSOCKET (NON-BLOCKING)
+# WEBSOCKET SERVER (NON-BLOCKING)
 # ============================================
 
 try:
@@ -270,7 +267,7 @@ try:
         instagram_connector
     )
     print("✅ WebSocket handler initialized")
-    
+
     def start_websocket_server():
         try:
             loop = asyncio.new_event_loop()
@@ -281,7 +278,7 @@ try:
             print(f"⚠️ WebSocket error: {e}")
         finally:
             loop.close()
-    
+
     ws_thread = threading.Thread(target=start_websocket_server, daemon=True)
     ws_thread.start()
     print("✅ WebSocket server started")
@@ -289,7 +286,7 @@ except Exception as e:
     print(f"⚠️ WebSocket setup failed: {e}")
 
 # ============================================
-# STORAGE FUNCTIONS
+# CHAT HISTORY
 # ============================================
 
 conversation_history = []
@@ -310,7 +307,6 @@ def save_chat_history():
     except Exception as e:
         print(f"⚠️ Save history failed: {e}")
 
-# Load history
 conversation_history = load_chat_history()
 print(f"📜 Loaded {len(conversation_history)} chat messages")
 
@@ -334,12 +330,13 @@ def update_ruby_status():
 def add_message(sender, text, is_user=False, image_path=None):
     if chat_list_ref and ui_page_ref:
         try:
-            controls_list = [
-                ft.Text(sender, size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_400 if is_user else ft.Colors.CYAN_400),
+            controls = [
+                ft.Text(sender, size=11, weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.AMBER_400 if is_user else ft.Colors.CYAN_400),
                 ft.Text(text, size=14, color=ft.Colors.WHITE)
             ]
             bubble = ft.Container(
-                content=ft.Column(controls_list, spacing=6),
+                content=ft.Column(controls, spacing=6),
                 bgcolor="#1E1E24" if not is_user else "#2A2A36",
                 padding=12,
                 border_radius=8,
@@ -355,13 +352,13 @@ def add_message(sender, text, is_user=False, image_path=None):
 
 def main_app_ui(page: ft.Page):
     global ui_page_ref, chat_list_ref, status_label_ref
-    
+
     try:
         ui_page_ref = page
         page.title = "Ruby"
         page.theme_mode = ft.ThemeMode.DARK
         page.vertical_alignment = ft.MainAxisAlignment.SPACE_BETWEEN
-        
+
         # Header
         header = ft.Container(
             content=ft.Column([
@@ -371,29 +368,42 @@ def main_app_ui(page: ft.Page):
             padding=10,
             bgcolor=ft.Colors.BLUE_GREY_900
         )
-        
-        # Chat area
+
+        # Chat list
         chat_list_ref = ft.Column(scroll=ft.ScrollMode.AUTO, spacing=8)
         chat_area = ft.Container(content=chat_list_ref, expand=True, padding=10)
-        
-        # Input
+
+        # Input row
         msg_input = ft.TextField(label="Message", expand=True)
-        
+
         def send_message(e):
-            if msg_input.value:
-                add_message("You", msg_input.value, is_user=True)
-                add_message("Ruby", "✨ Hey there! What's on your mind?")
-                msg_input.value = ""
-                msg_input.focus()
-        
-        send_btn = ft.IconButton(ft.icons.SEND, on_click=send_message)
+            if not msg_input.value:
+                return
+            user_text = msg_input.value
+            add_message("You", user_text, is_user=True)
+            msg_input.value = ""
+            msg_input.focus()
+            # Use the real local brain
+            try:
+                response = ruby_engine.think(user_text)
+            except Exception as ex:
+                response = f"⚠️ Error: {ex}"
+                log_crash(type(ex), ex, ex.__traceback__)
+            add_message("Ruby", response)
+            # Save history
+            conversation_history.append({"role": "user", "content": user_text})
+            conversation_history.append({"role": "assistant", "content": response})
+            save_chat_history()
+            page.update()
+
+        send_btn = ft.IconButton(icon=ft.icons.SEND_ROUNDED, on_click=send_message)
         input_row = ft.Row([msg_input, send_btn], spacing=5)
-        
+
         page.add(header, chat_area, input_row)
-        
+
         print("✅ UI loaded successfully!")
         update_ruby_status()
-        
+
     except Exception as e:
         print(f"❌ UI error: {e}")
         log_crash(type(e), e, e.__traceback__)
@@ -403,7 +413,6 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("🌹 RUBY APP STARTING")
     print("="*60 + "\n")
-    
     try:
         ft.app(target=main_app_ui)
     except Exception as e:
