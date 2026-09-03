@@ -1,4 +1,4 @@
-# engine/vector_store.py - 
+# engine/vector_store.py
 import os
 import sqlite3
 import json
@@ -335,7 +335,7 @@ class HybridMemorySystem:
             return {}
 
     # ============================================
-    # NEW METHODS ADDED FOR RubyEngine compatibility
+    # METHODS FOR RubyEngine COMPATIBILITY
     # ============================================
 
     def get_state(self) -> dict:
@@ -365,6 +365,32 @@ class HybridMemorySystem:
             """, (key, str(value), str(value)))
         conn.commit()
         conn.close()
+
+    def process(self, response: str, user_message: str):
+        """Process response for memory extraction from [SAVE_MEMORY: ...] tags"""
+        if "[SAVE_MEMORY:" in response:
+            try:
+                start = response.index("[SAVE_MEMORY:") + len("[SAVE_MEMORY:")
+                end = response.index("]", start)
+                fact = response[start:end].strip()
+                if fact:
+                    importance = 1
+                    category = 'general'
+                    
+                    # Check for importance marker
+                    if "IMPORTANT:" in fact:
+                        parts = fact.split("IMPORTANT:")
+                        fact = parts[0].strip()
+                        importance = 3
+                        category = 'important'
+                    elif "CATEGORY:" in fact:
+                        parts = fact.split("CATEGORY:")
+                        fact = parts[0].strip()
+                        category = parts[1].split()[0].strip() if len(parts) > 1 else 'general'
+                    
+                    self.save_hybrid_memory(fact, importance, category)
+            except Exception as e:
+                print(f"Memory extraction error: {e}")
 
     # ============================================
 
