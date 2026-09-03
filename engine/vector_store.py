@@ -307,6 +307,77 @@ class HybridMemorySystem:
         except Exception as e:
             print(f"Cleanup error: {e}")
 
+    # ============================================
+    # MEMORY COMPRESSION (NEW)
+    # ============================================
+
+    def compress_memories(self, days_threshold: int = 30):
+        """Compress old low-importance memories into summaries by category."""
+        print("🧠 Compressing memories...")
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+
+            # Get all low-importance memories older than threshold
+            cursor.execute("""
+                SELECT id, text, category FROM memories
+                WHERE importance < 2
+                AND created_at < datetime('now', ?)
+                ORDER BY category, created_at DESC
+            """, (f'-{days_threshold} days',))
+            rows = cursor.fetchall()
+
+            if not rows:
+                print("ℹ️ No old low-importance memories to compress.")
+                conn.close()
+                return
+
+            # Group by category
+            groups = {}
+            for mem_id, text, category in rows:
+                groups.setdefault(category or 'general', []).append((mem_id, text))
+
+            # For each category, create a summary
+            for category, memories in groups.items():
+                if not memories:
+                    continue
+                # Build summary (take first 5 unique facts, limit length)
+                facts = []
+                seen = set()
+                for _, text in memories:
+                    if text not in seen:
+                        facts.append(text)
+                        seen.add(text)
+                        if len(facts) >= 5:
+                            break
+                summary = f"[{category.capitalize()}] " + ", ".join(facts)
+                if len(summary) > 500:
+                    summary = summary[:497] + "..."
+
+                # Insert the summary as a medium-importance memory
+                cursor.execute("""
+                    INSERT INTO memories (text, importance, category, created_at)
+                    VALUES (?, 2, ?, CURRENT_TIMESTAMP)
+                """, (summary, category))
+
+                # Delete the original low-importance memories
+                ids = [mem_id for mem_id, _ in memories]
+                placeholders = ','.join('?' * len(ids))
+                cursor.execute(f"""
+                    DELETE FROM memories WHERE id IN ({placeholders})
+                """, ids)
+
+                print(f"✅ Compressed {len(memories)} memories in category '{category}' into summary.")
+
+            conn.commit()
+            conn.close()
+            print("🧠 Memory compression complete.")
+
+        except Exception as e:
+            print(f"❌ Compression error: {e}")
+
+    # ============================================
+
     def get_stats(self) -> dict:
         """Get memory system stats"""
         try:
