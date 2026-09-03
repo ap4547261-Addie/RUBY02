@@ -374,12 +374,11 @@ def main_app_ui(page: ft.Page):
 
     # ====== FIX: SEND BUTTON WITH ICON ======
     send_button = ft.IconButton(
-        icon=ft.icons.SEND,               # REQUIRED: set icon
-        icon_color=ft.Colors.CYAN_400,
-        tooltip="Send message",
-        on_click=lambda e: send_message(user_input.value),
-    )
-
+    icon=ft.icons.ARROW_FORWARD,          
+    icon_color=ft.Colors.CYAN_400,
+    tooltip="Send message",
+    on_click=lambda e: send_message(user_input.value),
+)
     # Layout: input row
     input_row = ft.Row(
         controls=[
