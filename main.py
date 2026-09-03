@@ -1,4 +1,4 @@
-# main.py - FINAL FULL VERSION (copy-paste ready)
+# main.py - FULL WORKING VERSION (with TextButton)
 import sys
 import os
 import traceback
@@ -381,11 +381,11 @@ def main_app_ui(page: ft.Page):
         save_chat_history()
         page.update()
 
-    # ✅ FIX: Use string "send" – works in all Flet versions
-    send_btn = ft.IconButton(
-        icon="send",
-        icon_color=ft.Colors.CYAN_400,
+    # ✅ FIX: Use TextButton instead of IconButton
+    send_btn = ft.TextButton(
+        "Send",
         on_click=send_message,
+        style=ft.ButtonStyle(color=ft.Colors.CYAN_400),
     )
 
     input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
