@@ -470,9 +470,8 @@ def main_app_ui(page: ft.Page):
         page.update()
         threading.Thread(target=process_generation, args=(text,), daemon=True).start()
 
-    # ✅ FIX: Use "send" string – works in all Flet versions
     send_btn = ft.IconButton(
-        icon="send",   # or ft.icons.SEND
+        icon=ft.icons.SEND,
         icon_color=ft.Colors.CYAN_400,
         on_click=send_click,
     )
