@@ -177,7 +177,29 @@ class RubyEnergySystem:
         self.total_sleeps += 1
         self.sleep_until = datetime.now() + timedelta(hours=sleep_hours)
         
+        # --- Sync, Compress, Backup ---
         self._sync_and_reset()
+        
+        # Compress old memories
+        try:
+            from main import hybrid_memory
+            hybrid_memory.compress_memories(days_threshold=30)
+        except Exception as e:
+            print(f"⚠️ Memory compression failed: {e}")
+        
+        # Backup to Gmail and Cloud
+        try:
+            from main import gmail, cloud, MEMORY_DB, KNOWLEDGE_DB
+            if gmail:
+                gmail.backup_db(MEMORY_DB, "ruby_memory.db")
+                gmail.backup_db(KNOWLEDGE_DB, "ruby_knowledge.db")
+            if cloud:
+                cloud.backup_db(MEMORY_DB, "ruby_memory.db")
+                cloud.backup_db(KNOWLEDGE_DB, "ruby_knowledge.db")
+            print("✅ Backups completed.")
+        except Exception as e:
+            print(f"⚠️ Backup on sleep failed: {e}")
+        # -------------------------------
         
         awake_duration = (datetime.now() - self.current_wake_start).seconds / 3600
         if awake_duration > self.longest_wake:
