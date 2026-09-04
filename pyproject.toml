@@ -6,7 +6,7 @@ authors = [
     {name = "Ruby", email = "ruby@example.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"                    # Changed from 3.12 to 3.10 for torch compatibility
 dependencies = [
     # Core UI Framework
     "flet>=0.25.0",
@@ -26,6 +26,15 @@ dependencies = [
     "google-api-python-client>=2.108.0",
     "google-auth-oauthlib>=1.1.0",
     "google-auth-httplib2>=0.1.0",
+    
+    # ============================================
+    # VISION ENGINE (Local MiniCPM‑V)
+    # ============================================
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "transformers>=4.35.0",
+    "accelerate>=0.25.0",
+    "pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]
@@ -39,7 +48,7 @@ playwright = [
     "playwright>=1.40.0",
 ]
 cloud = [
-    "google-cloud-storage>=2.14.0",  # Optional: only if you use Cloud Storage backup
+    "google-cloud-storage>=2.14.0",
 ]
 
 [tool.uv]
@@ -57,12 +66,12 @@ packages = ["engine", "tools", "memory", "personality"]
 
 [tool.black]
 line-length = 120
-target-version = ['py312']
+target-version = ['py310']           # Match the Python version
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py310"
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.10"
 ignore_missing_imports = true
