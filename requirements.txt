@@ -23,10 +23,8 @@ google-auth-httplib2>=0.1.0
 google-cloud-storage>=2.14.0
 
 # VISION ENGINE (Local MiniCPM‑V)
-# Pin PyTorch and torchvision to known-good CPU releases for CI.
-# CI installs these from the official PyTorch wheel index.
-torch==2.0.1
-torchvision==0.15.0
+torch>=2.0.0          # <-- changed: no exact pin
+torchvision>=0.15.0   # <-- changed: no exact pin
 transformers>=4.35.0
 accelerate>=0.25.0
 pillow>=10.0.0
