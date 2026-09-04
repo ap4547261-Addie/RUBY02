@@ -108,9 +108,10 @@ gmail = None
 credentials_file = ensure_credentials()
 if credentials_file:
     try:
+        token_path = os.path.join(STORAGE_DIR, "token_gmail.pickle")
         gmail = GmailBackup(
             creds_file=credentials_file,
-            token_file=os.path.join(STORAGE_DIR, "token_gmail.pickle")
+            token_file=token_path
         )
         print("📧 Gmail backup ready.")
     except Exception as e:
