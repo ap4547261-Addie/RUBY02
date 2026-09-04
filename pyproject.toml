@@ -12,7 +12,7 @@ authors = [
 ]
 license = {text = "MIT"}
 # Align with CI and PyTorch wheels availability
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     # Core UI
     "flet>=0.25.0",
@@ -63,5 +63,5 @@ line-length = 120
 target-version = "py311"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 ignore_missing_imports = true
