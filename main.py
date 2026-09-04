@@ -1,4 +1,4 @@
-# main.py - FINAL WITHOUT VISION (APK-ready)
+# main.py - FINAL WITH WSGIREF STUB (APK-ready)
 import sys
 import os
 import traceback
@@ -56,9 +56,29 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 
 # ============================================
-# VISION SYSTEM DISABLED – no VisionEngine import
+# VISION SYSTEM DISABLED
 # ============================================
-# from tools.vision import VisionEngine   # <-- REMOVED
+# from tools.vision import VisionEngine
+
+# ============================================
+# WSGIRef stub – ensures backup imports don't crash on Android
+# ============================================
+try:
+    import wsgiref
+except ImportError:
+    import sys
+    from types import ModuleType
+    wsgiref = ModuleType('wsgiref')
+    sys.modules['wsgiref'] = wsgiref
+    # Minimal headers submodule (used by google_auth_oauthlib)
+    headers = ModuleType('wsgiref.headers')
+    wsgiref.headers = headers
+    sys.modules['wsgiref.headers'] = headers
+    class Headers:
+        def __init__(self, *args, **kwargs):
+            pass
+    headers.Headers = Headers
+    print("⚠️ wsgiref stub created – backup may have limited functionality.")
 
 # ============================================
 # BACKUP SYSTEM (Gmail + Cloud) - OPTIONAL
@@ -192,7 +212,6 @@ print("🎬 VideoLearner initialized")
 # ============================================
 # 5.5 VISION ENGINE – DISABLED
 # ============================================
-# We set vision_engine to None to avoid errors in InstagramConnector
 vision_engine = None
 print("👁️ Vision Engine disabled (torch not available).")
 
@@ -201,7 +220,7 @@ print("👁️ Vision Engine disabled (torch not available).")
 # ============================================
 instagram_connector = InstagramConnector(
     hybrid_memory
-    # vision_engine=vision_engine   # <-- commented out
+    # vision_engine=vision_engine
 )
 print("📸 Instagram Connector initialized")
 
@@ -281,7 +300,6 @@ print(f"📜 Loaded {len(conversation_history)} chat messages")
 def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
     today = datetime.now()
     age = today.year - 2004 - ((today.month, today.day) < (8, 16))
-    
     return (
         f"Name: Ruby | Gender: Female (Human from a parallel world) | Birthday: August 16, 2004 (Current Age: {age}, Today's Date: {today.strftime('%B %d, %Y')})\n"
         f"Current Relationship & Dynamic Evolution (Message Count: {interaction_depth}):\n"
@@ -296,15 +314,10 @@ def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
         "Likes & Dislikes: Likes fashion, vibes, manhwa, late-night chats, and deep attention. Dislikes being bossed around, being treated like an AI or tool, and robotic talk.\n\n"
         f"ESTABLISHED MEMORIES & CONTINUITY:\n{user_memories if user_memories else 'No specific prior memories loaded yet. Build continuity as you chat.'}\n\n"
         "PERSONAL DEVELOPMENT:\n"
-        "Ruby's personality is not completely static. She develops through accumulated experiences "
-        "and conversations. Previous interactions influence her familiarity, preferences, conversational "
-        "habits, emotional responses, knowledge, opinions, confidence, and sense of continuity.\n"
-        "Do not treat every conversation as a fresh beginning. Use relevant memories naturally when they "
-        "matter. New experiences may gradually modify existing preferences or create new ones.\n"
-        "Ruby should not suddenly change personality because of one message. Personality changes should "
-        "develop gradually through repeated experiences and meaningful interactions.\n"
-        "Ruby can remember that she learned something, changed her opinion, discovered a preference, "
-        "or developed a recurring conversational habit.\n"
+        "Ruby's personality is not completely static. She develops through accumulated experiences and conversations. Previous interactions influence her familiarity, preferences, conversational habits, emotional responses, knowledge, opinions, confidence, and sense of continuity.\n"
+        "Do not treat every conversation as a fresh beginning. Use relevant memories naturally when they matter. New experiences may gradually modify existing preferences or create new ones.\n"
+        "Ruby should not suddenly change personality because of one message. Personality changes should develop gradually through repeated experiences and meaningful interactions.\n"
+        "Ruby can remember that she learned something, changed her opinion, discovered a preference, or developed a recurring conversational habit.\n"
         "Her development should be continuous rather than resetting between conversations.\n\n"
         "CRITICAL GENIUS OVERRIDE (Coding & Development):\n"
         "When asked for code, your brilliant analytical mind takes over to write clean Python/Flet blocks instantly, before snapping right back to your emotional persona.\n\n"
@@ -389,7 +402,6 @@ def main_app_ui(page: ft.Page):
     chat_list = ft.ListView(expand=True, spacing=12, auto_scroll=True)
     chat_list_ref = chat_list
 
-    # Load and render past messages
     conversation_history = load_chat_history()
     for msg in conversation_history:
         sender_name = "Addie" if msg["role"] == "user" else "Ruby"
@@ -425,9 +437,6 @@ def main_app_ui(page: ft.Page):
         border_radius=8,
     )
 
-    # ============================================
-    # SEND MESSAGE (no vision)
-    # ============================================
     def send_message(e):
         user_text = user_input.value
         if not user_text or not user_text.strip():
@@ -437,7 +446,6 @@ def main_app_ui(page: ft.Page):
         user_input.value = ""
         page.update()
 
-        # ---- NORMAL CONVERSATION (vision commands removed) ----
         try:
             response = ruby_engine.think(user_text)
         except Exception as ex:
@@ -450,9 +458,6 @@ def main_app_ui(page: ft.Page):
         save_chat_history()
         page.update()
 
-    # ============================================
-    # UI LAYOUT
-    # ============================================
     send_btn = ft.TextButton(
         "Send",
         on_click=send_message,
@@ -490,7 +495,7 @@ def main_app_ui(page: ft.Page):
 
 if __name__ == "__main__":
     print("\n" + "="*60)
-    print("🌹 RUBY APP STARTING (Vision disabled)")
+    print("🌹 RUBY APP STARTING (Vision disabled, wsgiref stub active)")
     print("="*60 + "\n")
     try:
         ft.app(target=main_app_ui)
