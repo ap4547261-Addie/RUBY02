@@ -1,6 +1,5 @@
 # ============================================
 # RUBY - COMPLETE SYSTEM REQUIREMENTS
-# Python 3.12+
 # ============================================
 
 # ============================================
@@ -28,19 +27,21 @@ websockets>=12.0
 # ============================================
 # GOOGLE APIS (GMAIL + CLOUD BACKUP)
 # ============================================
-google-api-python-client>=2.108.0   # Required for Gmail backup
-google-auth-oauthlib>=1.1.0         # Required for OAuth 2.0
-google-auth-httplib2>=0.1.0         # HTTP transport for Google APIs
-google-cloud-storage>=2.14.0        # Optional – only if you use Cloud Storage
+google-api-python-client>=2.108.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.0
+google-cloud-storage>=2.14.0
+
+# ============================================
+# VISION ENGINE (Local MiniCPM‑V)
+# ============================================
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.35.0
+accelerate>=0.25.0
+pillow>=10.0.0
 
 # ============================================
 # BROWSER AUTOMATION (OPTIONAL)
 # ============================================
-# playwright>=1.40.0  # Uncomment for Instagram browsing
-
-# ============================================
-# DEVELOPMENT TOOLS (OPTIONAL)
-# ============================================
-# pytest>=8.0.0
-# black>=24.0.0
-# ruff>=0.3.0
+# playwright>=1.40.0
