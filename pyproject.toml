@@ -11,7 +11,8 @@ authors = [
     {name = "Ruby", email = "ruby@example.com"}
 ]
 license = {text = "MIT"}
-requires-python = ">=3.12"
+# Align with CI and PyTorch wheels availability
+requires-python = ">=3.11"
 dependencies = [
     # Core UI
     "flet>=0.25.0",
@@ -27,9 +28,9 @@ dependencies = [
     "google-api-python-client>=2.108.0",
     "google-auth-oauthlib>=1.1.0",
     "google-auth-httplib2>=0.1.0",
-    # Vision & ML
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
+    # Vision & ML (pinned to exacts in requirements.txt / CI)
+    "torch==2.0.1",
+    "torchvision==0.15.0",
     "transformers>=4.35.0",
     "accelerate>=0.25.0",
     "pillow>=10.0.0",
@@ -55,12 +56,12 @@ exclude = ["tests*", "docs*"]
 
 [tool.black]
 line-length = 120
-target-version = ['py310']
+target-version = ['py311']
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 ignore_missing_imports = true
