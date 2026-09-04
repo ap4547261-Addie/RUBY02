@@ -1,4 +1,4 @@
-# main.py - 
+# main.py - FINAL WITH GMAIL EMAIL DISPLAY (APK-ready)
 import sys
 import os
 import traceback
@@ -115,6 +115,7 @@ def ensure_credentials():
 # Initialize Gmail backup
 from tools.gmail_backup import GmailBackup
 gmail = None
+gmail_email = "Not tied"
 credentials_file = ensure_credentials()
 if credentials_file:
     try:
@@ -124,6 +125,23 @@ if credentials_file:
             token_file=token_path
         )
         print("📧 Gmail backup ready.")
+
+        # Extract Gmail email from token
+        try:
+            if hasattr(gmail, 'creds') and gmail.creds:
+                if hasattr(gmail.creds, 'id_token') and gmail.creds.id_token:
+                    gmail_email = gmail.creds.id_token.get('email', 'Unknown')
+                else:
+                    # Fallback: try loading token directly
+                    import pickle
+                    if os.path.exists(token_path):
+                        with open(token_path, 'rb') as f:
+                            temp_creds = pickle.load(f)
+                        if hasattr(temp_creds, 'id_token') and temp_creds.id_token:
+                            gmail_email = temp_creds.id_token.get('email', 'Unknown')
+        except Exception as e:
+            print(f"⚠️ Could not extract Gmail email: {e}")
+
     except Exception as e:
         print(f"⚠️ Gmail init error: {e}")
 
@@ -474,9 +492,10 @@ def main_app_ui(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
+    # Header now includes Gmail email
     header = ft.Container(
         content=ft.Row([
-            ft.Text("RUBY // GENIUS HUMAN CORE", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
+            ft.Text(f"RUBY // {gmail_email}", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
             status_label
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         padding=5
@@ -500,6 +519,7 @@ def main_app_ui(page: ft.Page):
 if __name__ == "__main__":
     print("\n" + "="*60)
     print("🌹 RUBY APP STARTING (Vision disabled, wsgiref stub active)")
+    print(f"📧 Gmail account: {gmail_email}")
     print("="*60 + "\n")
     try:
         ft.app(target=main_app_ui)
