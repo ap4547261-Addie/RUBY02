@@ -1,4 +1,4 @@
-# main.py - FINAL WITH VISION INTEGRATION
+# main.py - FINAL WITHOUT VISION (APK-ready)
 import sys
 import os
 import traceback
@@ -56,15 +56,14 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 
 # ============================================
-# NEW: IMPORT VISION ENGINE
+# VISION SYSTEM DISABLED – no VisionEngine import
 # ============================================
-from tools.vision import VisionEngine
+# from tools.vision import VisionEngine   # <-- REMOVED
 
 # ============================================
 # BACKUP SYSTEM (Gmail + Cloud) - OPTIONAL
 # ============================================
 
-# Write credentials from secret (if available)
 def ensure_credentials():
     creds_content = os.getenv("GMAIL_CREDENTIANLS_JSON")
     if creds_content:
@@ -191,18 +190,18 @@ video_learner = VideoLearner(data_ingestion)
 print("🎬 VideoLearner initialized")
 
 # ============================================
-# 5.5 INITIALIZE VISION ENGINE (MINICPM-V)
+# 5.5 VISION ENGINE – DISABLED
 # ============================================
-print("👁️ Initializing Vision Engine (MiniCPM-V)...")
-vision_engine = VisionEngine()  # This will load the local model
-print("✅ Vision Engine ready.")
+# We set vision_engine to None to avoid errors in InstagramConnector
+vision_engine = None
+print("👁️ Vision Engine disabled (torch not available).")
 
 # ============================================
-# 6. INITIALIZE INSTAGRAM CONNECTOR (with vision)
+# 6. INITIALIZE INSTAGRAM CONNECTOR (without vision)
 # ============================================
 instagram_connector = InstagramConnector(
-    hybrid_memory,
-    vision_engine=vision_engine  # pass vision engine if your class accepts it
+    hybrid_memory
+    # vision_engine=vision_engine   # <-- commented out
 )
 print("📸 Instagram Connector initialized")
 
@@ -374,7 +373,7 @@ def add_message(sender, text, is_user=False, image_path=None):
         ui_page_ref.update()
 
 # ============================================
-# 12. MAIN UI
+# 12. MAIN UI (Vision commands removed)
 # ============================================
 
 def main_app_ui(page: ft.Page):
@@ -417,7 +416,7 @@ def main_app_ui(page: ft.Page):
     status_label_ref = status_label
 
     user_input = ft.TextField(
-        hint_text="Say something to Ruby or ask her to draw...",
+        hint_text="Say something to Ruby...",
         border_color="#3A3A46",
         focused_border_color=ft.Colors.CYAN_400,
         bgcolor="#18181C",
@@ -427,41 +426,18 @@ def main_app_ui(page: ft.Page):
     )
 
     # ============================================
-    # SEND MESSAGE WITH VISION COMMANDS
+    # SEND MESSAGE (no vision)
     # ============================================
     def send_message(e):
         user_text = user_input.value
         if not user_text or not user_text.strip():
             return
 
-        # Add user message to UI
         add_message("You", user_text, is_user=True)
         user_input.value = ""
         page.update()
 
-        # ---- VISION COMMAND HANDLING ----
-        # 1. "describe <path/url>"
-        if user_text.lower().startswith("describe "):
-            parts = user_text.split(maxsplit=1)
-            if len(parts) > 1:
-                target = parts[1].strip()
-                # Check if it's a URL
-                if target.startswith(("http://", "https://")):
-                    description = vision_engine.describe_from_url(target)
-                else:
-                    # Local file path
-                    if os.path.exists(target):
-                        description = vision_engine.describe_image(target)
-                    else:
-                        description = f"File not found: {target}"
-                add_message("Ruby", f"I see: {description}")
-                conversation_history.append({"role": "user", "content": user_text})
-                conversation_history.append({"role": "assistant", "content": f"I see: {description}"})
-                save_chat_history()
-                page.update()
-                return
-
-        # ---- NORMAL CONVERSATION ----
+        # ---- NORMAL CONVERSATION (vision commands removed) ----
         try:
             response = ruby_engine.think(user_text)
         except Exception as ex:
@@ -514,10 +490,9 @@ def main_app_ui(page: ft.Page):
 
 if __name__ == "__main__":
     print("\n" + "="*60)
-    print("🌹 RUBY APP STARTING (with MiniCPM-V vision)")
+    print("🌹 RUBY APP STARTING (Vision disabled)")
     print("="*60 + "\n")
     try:
-        # Use ft.app() without view parameter – works for APK and desktop
         ft.app(target=main_app_ui)
     except Exception as e:
         print(f"❌ FATAL ERROR: {e}")
