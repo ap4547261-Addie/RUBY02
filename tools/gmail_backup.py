@@ -1,4 +1,4 @@
-# tools/gmail_backup.py
+# tools/gmail_backup.py - WORKING ON ANDROID
 import os
 import base64
 import pickle
@@ -33,7 +33,8 @@ class GmailBackup:
                 creds.refresh(Request())
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(self.creds_file, self.SCOPES)
-                creds = flow.run_local_server(port=8080)
+                # This works on both desktop and Android
+                creds = flow.run_console()  # ← SIMPLE FIX
             with open(self.token_file, 'wb') as f:
                 pickle.dump(creds, f)
         return creds
