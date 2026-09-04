@@ -331,7 +331,8 @@ class BrainRouter:
             return False
 
     def _call_local_brain(self, messages, context=None):
-        """Ruby's local brain response - 0 API calls - Human-like memory and curiosity"""
+        """Ruby's local brain response - 0 API calls - Human-like memory and curiosity.
+           Now with automatic learning: saves every user message and question."""
         try:
             from main import hybrid_memory
         except ImportError:
@@ -346,12 +347,20 @@ class BrainRouter:
         if not last_user_msg:
             return None
 
-        # Save any question asked by the user
+        # ----- AUTOMATIC LEARNING: Save every user message -----
+        # Importance 2 for general chat, 3 for questions.
         if "?" in last_user_msg:
             hybrid_memory.save_hybrid_memory(
                 f"User asked: {last_user_msg}",
                 importance=3,
                 category="user_questions"
+            )
+        else:
+            # Save all non‑question messages too (automatic learning)
+            hybrid_memory.save_hybrid_memory(
+                f"User said: {last_user_msg}",
+                importance=2,
+                category="user_messages"
             )
 
         # Search for relevant memory (including previous conversations)
@@ -426,8 +435,8 @@ class BrainRouter:
         return False
 
     def route_request(self, messages, personality=None, use_cloud_preferred=True):
-        """Smart routing with Ruby's energy system and 9 keys"""
-
+        """Smart routing with Ruby's energy system and 9 keys.
+           Automatically saves Ruby's replies for learning."""
         # Check if Ruby is available
         if not self.energy.is_available():
             if self.energy.is_sleeping:
@@ -461,6 +470,16 @@ class BrainRouter:
         # Try local brain first
         local_response = self._call_local_brain(messages)
         if local_response is not None:
+            # Save Ruby's reply (automatic learning)
+            try:
+                from main import hybrid_memory
+                hybrid_memory.save_hybrid_memory(
+                    f"Ruby replied: {local_response}",
+                    importance=2,
+                    category="ruby_responses"
+                )
+            except:
+                pass
             return {
                 "source": "local_brain",
                 "response": local_response
@@ -529,10 +548,18 @@ class BrainRouter:
                         # Save the interaction as a memory
                         try:
                             from main import hybrid_memory
+                            # Save the question (if not already saved)
+                            if last_user_msg:
+                                hybrid_memory.save_hybrid_memory(
+                                    f"User asked: {last_user_msg}",
+                                    importance=3,
+                                    category="user_questions"
+                                )
+                            # Save Ruby's reply (automatic learning)
                             hybrid_memory.save_hybrid_memory(
-                                f"User asked: {last_user_msg} - Ruby replied: {response}",
-                                importance=3,
-                                category="conversation_patterns"
+                                f"Ruby replied: {response}",
+                                importance=2,
+                                category="ruby_responses"
                             )
                         except:
                             pass
