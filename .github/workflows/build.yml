@@ -22,20 +22,28 @@ jobs:
         sudo rm -rf "$AGENT_TOOLSDIRECTORY"
         df -h
 
-    - name: Install Linux Desktop Dependencies (Fixes Doctor Check)
+    - name: Install Linux Desktop Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y libgtk-3-dev mesa-utils
 
-    - name: Set up Python
+    - name: Set up Python 3.10
       uses: actions/setup-python@v5
       with:
-        python-version: '3.12'
+        python-version: '3.10'
 
-    - name: Install dependencies
+    - name: Install dependencies (including PyTorch)
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        # Install PyTorch CPU version for the host (x86_64)
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install torchvision --index-url https://download.pytorch.org/whl/cpu
+        # Install the rest from requirements.txt or pyproject.toml
+        if [ -f pyproject.toml ]; then
+          pip install .
+        else
+          pip install -r requirements.txt
+        fi
         pip install flet-cli
 
     - name: Set up Flutter
@@ -45,38 +53,28 @@ jobs:
         cache: true
 
     - name: Accept Android Licenses
-      run: |
-        yes | flutter doctor --android-licenses || true
-    
+      run: yes | flutter doctor --android-licenses || true
+
     - name: Generate Config and Build APK
       env:
-        # Chat Keys (1-4)
         GEMINI_API_KEY1: ${{ secrets.GEMINI_API_KEY1 }}
         GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
         GEMINI_API_KEY3: ${{ secrets.GEMINI_API_KEY3 }}
         GEMINI_API_KEY4: ${{ secrets.GEMINI_API_KEY4 }}
-        # Image Keys (5-9)
         GEMINI_API_KEY5: ${{ secrets.GEMINI_API_KEY5 }}
         GEMINI_API_KEY6: ${{ secrets.GEMINI_API_KEY6 }}
         GEMINI_API_KEY7: ${{ secrets.GEMINI_API_KEY7 }}
         GEMINI_API_KEY8: ${{ secrets.GEMINI_API_KEY8 }}
         GEMINI_API_KEY9: ${{ secrets.GEMINI_API_KEY9 }}
-        # Fallback
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        # Pinecone
         PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
         PINECONE_INDEX_HOST: ${{ secrets.PINECONE_INDEX_HOST }}
-        # ============================================
-        # BACKUP CREDENTIALS (Gmail + Cloud)
-        # ============================================
         GMAIL_CREDENTIANLS_JSON: ${{ secrets.GMAIL_CREDENTIANLS_JSON }}
-        # Optionally, add service account for Cloud Storage
         GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
         FLET_SUPPRESS_PROMPTS: "true"
       run: |
-        # ---- 1. Create config.py for Gemini ----
+        # ---- Create config.py ----
         cat > config.py << 'EOF'
-        # Gemini API Keys
         GEMINI_API_KEY1 = "$GEMINI_API_KEY1"
         GEMINI_API_KEY2 = "$GEMINI_API_KEY2"
         GEMINI_API_KEY3 = "$GEMINI_API_KEY3"
@@ -86,46 +84,36 @@ jobs:
         GEMINI_API_KEY7 = "$GEMINI_API_KEY7"
         GEMINI_API_KEY8 = "$GEMINI_API_KEY8"
         GEMINI_API_KEY9 = "$GEMINI_API_KEY9"
-        GEMINI_API_KEY = "$GEMINI_API_KEY"
+        GEMINI_API_KEY   = "$GEMINI_API_KEY"
         PINECONE_API_KEY = "$PINECONE_API_KEY"
         PINECONE_INDEX_HOST = "$PINECONE_INDEX_HOST"
         EOF
 
-        # ---- 2. Create credentials.json for Gmail backup ----
+        # ---- Create Gmail credentials ----
         if [ -n "$GMAIL_CREDENTIANLS_JSON" ]; then
           echo "$GMAIL_CREDENTIANLS_JSON" > credentials.json
-          echo "✅ credentials.json created from secret."
+          echo "✅ credentials.json created."
         else
-          echo "⚠️ GMAIL_CREDENTIANLS_JSON not set; Gmail backup will be disabled."
+          echo "⚠️ GMAIL_CREDENTIANLS_JSON not set – Gmail backup disabled."
         fi
 
-        # ---- 3. Create service_account.json for Cloud Storage (optional) ----
+        # ---- Create Cloud Storage service account ----
         if [ -n "$GCLOUD_SERVICE_ACCOUNT_JSON" ]; then
           echo "$GCLOUD_SERVICE_ACCOUNT_JSON" > service_account.json
-          echo "✅ service_account.json created from secret."
+          echo "✅ service_account.json created."
         else
-          echo "ℹ️ GCLOUD_SERVICE_ACCOUNT_JSON not set; Cloud Storage will be disabled."
+          echo "ℹ️ GCLOUD_SERVICE_ACCOUNT_JSON not set – Cloud Storage disabled."
         fi
 
-        # ---- 4. Clean and build ----
-        rm -rf build/ dist/ .venv/ venv/ __pycache__/
-        rm -f RUBY_03.png
+        # ---- Clean previous builds ----
+        rm -rf build/ dist/ __pycache__/
 
-        # Verify files exist
-        cat config.py
-        if [ -f credentials.json ]; then
-          echo "✅ credentials.json present."
-        fi
-        if [ -f service_account.json ]; then
-          echo "✅ service_account.json present."
-        fi
+        # ---- Test PyTorch import (to confirm installation) ----
+        python -c "import torch; print('PyTorch version:', torch.__version__)" || exit 1
 
-        # Compile Python files
-        python3 -m compileall . || exit 1
+        # ---- Build APK ----
+        flet build apk --python-version 3.10 --arch arm64-v8a --yes --verbose
 
-        # Build APK
-        flet build apk --python-version 3.12 --arch arm64-v8a --yes
-        
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
