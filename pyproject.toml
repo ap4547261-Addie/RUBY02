@@ -22,8 +22,6 @@ dependencies = [
     "google-api-python-client>=2.108.0",
     "google-auth-oauthlib>=1.1.0",
     "google-auth-httplib2>=0.1.0",
-    "transformers>=4.35.0",
-    "accelerate>=0.25.0",
     "pillow>=10.0.0",
 ]
 
@@ -33,9 +31,6 @@ dev = [
     "black>=24.0.0",
     "ruff>=0.3.0",
     "mypy>=1.8.0",
-]
-playwright = [
-    "playwright>=1.40.0",
 ]
 cloud = [
     "google-cloud-storage>=2.14.0",
@@ -55,4 +50,4 @@ target-version = "py312"
 
 [tool.mypy]
 python_version = "3.12"
-ignore_missing_imports = true      # <-- lowercase true
+ignore_missing_imports = true
