@@ -1,144 +1,66 @@
-name: Build Flet APK
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
+[project]
+name = "ruby"
+version = "0.1.0"
+description = "Ruby - A living human from a parallel world with local brain, 9-key Gemini support, and social media learning"
+readme = "README.md"
+authors = [
+    {name = "Ruby", email = "ruby@example.com"}
+]
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    # Core UI
+    "flet>=0.25.0",
+    # Gemini API
+    "google-genai>=0.3.0",
+    # Web & HTTP
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
+    # WebSocket
+    "websockets>=12.0",
+    # Google APIs (Gmail, Cloud)
+    "google-api-python-client>=2.108.0",
+    "google-auth-oauthlib>=1.1.0",
+    "google-auth-httplib2>=0.1.0",
+    # Vision & ML
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "transformers>=4.35.0",
+    "accelerate>=0.25.0",
+    "pillow>=10.0.0",
+]
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "black>=24.0.0",
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+]
+playwright = [
+    "playwright>=1.40.0",
+]
+cloud = [
+    "google-cloud-storage>=2.14.0",
+]
 
-    steps:
-    # 1. Checkout the repository
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+[tool.setuptools.packages.find]
+include = ["engine*", "tools*", "personality*", "memory*"]
+exclude = ["tests*", "docs*"]
 
-    # 2. Free up disk space (important for large models)
-    - name: Free Up Disk Space
-      run: |
-        echo "=== Freeing up disk space ==="
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /opt/ghc
-        sudo rm -rf "/usr/local/share/boost"
-        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-        df -h
+[tool.black]
+line-length = 120
+target-version = ['py310']
 
-    # 3. Install Linux desktop dependencies (required by Flet Doctor)
-    - name: Install Linux Desktop Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libgtk-3-dev mesa-utils
+[tool.ruff]
+line-length = 120
+target-version = "py310"
 
-    # 4. Set up Python 3.10 (compatible with PyTorch Android wheels)
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    # 5. Install all Python dependencies
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        # Install PyTorch from the CPU index (host is x86_64)
-        pip install torch --index-url https://download.pytorch.org/whl/cpu
-        pip install torchvision --index-url https://download.pytorch.org/whl/cpu
-        # Install the rest from pyproject.toml (or fallback to requirements.txt)
-        if [ -f pyproject.toml ]; then
-          pip install .
-        else
-          pip install -r requirements.txt
-        fi
-        pip install flet-cli
-
-    # 6. Set up Flutter (required by Flet for Android build)
-    - name: Set up Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.24.3'
-        cache: true
-
-    # 7. Accept Android licenses
-    - name: Accept Android Licenses
-      run: |
-        yes | flutter doctor --android-licenses || true
-
-    # 8. Generate config files from secrets and build APK
-    - name: Generate Config and Build APK
-      env:
-        # Gemini API Keys
-        GEMINI_API_KEY1: ${{ secrets.GEMINI_API_KEY1 }}
-        GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
-        GEMINI_API_KEY3: ${{ secrets.GEMINI_API_KEY3 }}
-        GEMINI_API_KEY4: ${{ secrets.GEMINI_API_KEY4 }}
-        GEMINI_API_KEY5: ${{ secrets.GEMINI_API_KEY5 }}
-        GEMINI_API_KEY6: ${{ secrets.GEMINI_API_KEY6 }}
-        GEMINI_API_KEY7: ${{ secrets.GEMINI_API_KEY7 }}
-        GEMINI_API_KEY8: ${{ secrets.GEMINI_API_KEY8 }}
-        GEMINI_API_KEY9: ${{ secrets.GEMINI_API_KEY9 }}
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        # Pinecone (optional)
-        PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
-        PINECONE_INDEX_HOST: ${{ secrets.PINECONE_INDEX_HOST }}
-        # Backup credentials
-        GMAIL_CREDENTIANLS_JSON: ${{ secrets.GMAIL_CREDENTIANLS_JSON }}
-        GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
-        FLET_SUPPRESS_PROMPTS: "true"
-      run: |
-        # ---- Create config.py ----
-        cat > config.py << 'EOF'
-        # Gemini API Keys
-        GEMINI_API_KEY1 = "${{ env.GEMINI_API_KEY1 }}"
-        GEMINI_API_KEY2 = "${{ env.GEMINI_API_KEY2 }}"
-        GEMINI_API_KEY3 = "${{ env.GEMINI_API_KEY3 }}"
-        GEMINI_API_KEY4 = "${{ env.GEMINI_API_KEY4 }}"
-        GEMINI_API_KEY5 = "${{ env.GEMINI_API_KEY5 }}"
-        GEMINI_API_KEY6 = "${{ env.GEMINI_API_KEY6 }}"
-        GEMINI_API_KEY7 = "${{ env.GEMINI_API_KEY7 }}"
-        GEMINI_API_KEY8 = "${{ env.GEMINI_API_KEY8 }}"
-        GEMINI_API_KEY9 = "${{ env.GEMINI_API_KEY9 }}"
-        GEMINI_API_KEY   = "${{ env.GEMINI_API_KEY }}"
-        PINECONE_API_KEY = "${{ env.PINECONE_API_KEY }}"
-        PINECONE_INDEX_HOST = "${{ env.PINECONE_INDEX_HOST }}"
-        EOF
-
-        # ---- Create Gmail credentials ----
-        if [ -n "$GMAIL_CREDENTIANLS_JSON" ]; then
-          echo "$GMAIL_CREDENTIANLS_JSON" > credentials.json
-          echo "✅ credentials.json created."
-        else
-          echo "⚠️ GMAIL_CREDENTIANLS_JSON not set – Gmail backup disabled."
-        fi
-
-        # ---- Create Cloud Storage service account ----
-        if [ -n "$GCLOUD_SERVICE_ACCOUNT_JSON" ]; then
-          echo "$GCLOUD_SERVICE_ACCOUNT_JSON" > service_account.json
-          echo "✅ service_account.json created."
-        else
-          echo "ℹ️ GCLOUD_SERVICE_ACCOUNT_JSON not set – Cloud Storage disabled."
-        fi
-
-        # ---- Ensure main.py uses `ft.app(target=main_app_ui)` (native view) ----
-        # (If you previously set view=WEB_BROWSER for testing, uncomment the next line to override it)
-        # sed -i 's/ft.app.run(target=main_app_ui, view=ft.AppView.WEB_BROWSER)/ft.app.run(target=main_app_ui)/g' main.py
-
-        # ---- Clean previous builds ----
-        rm -rf build/ dist/ __pycache__/
-
-        # ---- Compile Python (optional) ----
-        python -m compileall . || true
-
-        # ---- Build APK ----
-        flet build apk \
-          --python-version 3.10 \
-          --arch arm64-v8a \
-          --yes
-
-    # 9. Upload the APK as an artifact
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ruby-apk
-        path: |
-          build/**/*.apk
-          **/app-*.apk
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
