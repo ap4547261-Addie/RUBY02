@@ -1,41 +1,57 @@
 # tools/cloud_backup.py
 import os
 from datetime import datetime
-from google.cloud import storage
+
+# Try to import Google Cloud Storage – if it fails, disable it gracefully
+try:
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    storage = None
+    GCS_AVAILABLE = False
+    print("⚠️ Google Cloud Storage not available – Cloud backup disabled.")
 
 class CloudBackup:
-    def __init__(self, bucket_name, credentials_path="service_account.json"):
-        self.client = storage.Client.from_service_account_json(credentials_path)
-        self.bucket = self.client.bucket(bucket_name)
-        if not self.bucket.exists():
-            self.bucket.create()
-            print(f"☁️ Created bucket: {bucket_name}")
-        print(f"☁️ Cloud Storage ready: {bucket_name}")
+    def __init__(self, bucket_name, credentials_path):
+        self.bucket_name = bucket_name
+        self.credentials_path = credentials_path
+        self.client = None
+        if GCS_AVAILABLE:
+            try:
+                self.client = storage.Client.from_service_account_json(credentials_path)
+                print("☁️ Cloud Storage client initialized.")
+            except Exception as e:
+                print(f"⚠️ Cloud Storage client error: {e}")
+                self.client = None
+        else:
+            print("ℹ️ Cloud backup disabled (no google-cloud-storage).")
     
-    def backup_db(self, db_path, db_name="ruby_memory.db"):
+    def backup_db(self, db_path, db_name):
+        if not self.client:
+            print("⚠️ Cloud backup not available – skipping.")
+            return False
         try:
-            blob = self.bucket.blob(f"backups/{datetime.now().strftime('%Y%m%d')}/{db_name}")
+            bucket = self.client.bucket(self.bucket_name)
+            blob = bucket.blob(db_name)
             blob.upload_from_filename(db_path)
-            print(f"✅ Cloud backup uploaded: {blob.name}")
+            print(f"✅ Cloud backup uploaded: {db_name}")
             return True
         except Exception as e:
             print(f"❌ Cloud backup error: {e}")
             return False
     
-    def restore_latest(self, db_path, db_name="ruby_memory.db"):
+    def restore_latest(self, db_path, db_name):
+        if not self.client:
+            print("⚠️ Cloud backup not available – skipping restore.")
+            return False
         try:
-            blobs = list(self.bucket.list_blobs(prefix="backups/"))
-            if not blobs:
-                print("⚠️ No Cloud backup found.")
+            bucket = self.client.bucket(self.bucket_name)
+            blob = bucket.blob(db_name)
+            if not blob.exists():
+                print(f"⚠️ No cloud backup found for {db_name}.")
                 return False
-            # Find the most recent blob for this db_name
-            candidates = [b for b in blobs if b.name.endswith(db_name)]
-            if not candidates:
-                print(f"⚠️ No Cloud backup for {db_name}.")
-                return False
-            latest = sorted(candidates, key=lambda b: b.time_created, reverse=True)[0]
-            latest.download_to_filename(db_path)
-            print(f"✅ Cloud restore: {latest.name}")
+            blob.download_to_filename(db_path)
+            print(f"✅ Cloud backup restored: {db_name}")
             return True
         except Exception as e:
             print(f"❌ Cloud restore error: {e}")
