@@ -5,7 +5,8 @@
 # ============================================
 # CORE UI FRAMEWORK
 # ============================================
-flet>=0.23.0,<0.25.0
+# Align with pyproject (flet 0.25+)
+flet>=0.25.0
 
 # ============================================
 # GOOGLE GEMINI API (9-KEY SUPPORT)
@@ -34,9 +35,12 @@ google-cloud-storage>=2.14.0
 
 # ============================================
 # VISION ENGINE (Local MiniCPM‑V)
+#
+# Pin PyTorch and torchvision to known-good CPU releases for CI. These
+# are installed from the official PyTorch wheel index in CI.
 # ============================================
-torch>=2.0.0
-torchvision>=0.15.0
+torch==2.0.1
+torchvision==0.15.0
 transformers>=4.35.0
 accelerate>=0.25.0
 pillow>=10.0.0
