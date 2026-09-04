@@ -31,7 +31,6 @@ jobs:
     - name: Install host dependencies
       run: |
         python -m pip install --upgrade pip
-        # Install everything from requirements.txt using the PyTorch CPU index
         pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
         pip install flet-cli
 
@@ -61,6 +60,8 @@ jobs:
         GMAIL_CREDENTIANLS_JSON: ${{ secrets.GMAIL_CREDENTIANLS_JSON }}
         GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
         FLET_SUPPRESS_PROMPTS: "true"
+        # THE FIX: use environment variable instead of --pip-args
+        PIP_EXTRA_INDEX_URL: "https://download.pytorch.org/whl/cpu"
       run: |
         cat > config.py << EOF
         GEMINI_API_KEY1 = "$GEMINI_API_KEY1"
@@ -85,12 +86,12 @@ jobs:
         fi
 
         rm -rf build/ dist/ __pycache__/
+        # No --pip-args here – the environment variable is used
         flet build apk \
           --python-version 3.14 \
           --arch arm64-v8a \
           --yes \
-          --verbose \
-          --pip-args "--extra-index-url https://download.pytorch.org/whl/cpu"
+          --verbose
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
