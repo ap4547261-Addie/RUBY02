@@ -1,4 +1,3 @@
-# tools/gmail_backup.py - WORKING ON ANDROID
 import os
 import base64
 import pickle
@@ -9,14 +8,12 @@ from email import encoders
 from datetime import datetime
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 class GmailBackup:
     SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
     
-    def __init__(self, creds_file="credentials.json", token_file="token_gmail.pickle"):
-        self.creds_file = creds_file
+    def __init__(self, creds_file=None, token_file="token_gmail.pickle"):
         self.token_file = token_file
         self.creds = self._authenticate()
         self.service = build('gmail', 'v1', credentials=self.creds)
@@ -30,13 +27,12 @@ class GmailBackup:
                 creds = pickle.load(f)
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
+                # Refresh if expired (needs internet)
                 creds.refresh(Request())
+                with open(self.token_file, 'wb') as f:
+                    pickle.dump(creds, f)
             else:
-                flow = InstalledAppFlow.from_client_secrets_file(self.creds_file, self.SCOPES)
-                # This works on both desktop and Android
-                creds = flow.run_console()  # ← SIMPLE FIX
-            with open(self.token_file, 'wb') as f:
-                pickle.dump(creds, f)
+                raise Exception("No valid token – run token generation script on Termux/desktop first.")
         return creds
     
     def _ensure_label(self):
