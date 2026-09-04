@@ -1,4 +1,4 @@
-# main.py - FINAL WITH WSGIREF STUB (APK-ready)
+# main.py - 
 import sys
 import os
 import traceback
@@ -70,7 +70,6 @@ except ImportError:
     from types import ModuleType
     wsgiref = ModuleType('wsgiref')
     sys.modules['wsgiref'] = wsgiref
-    # Minimal headers submodule (used by google_auth_oauthlib)
     headers = ModuleType('wsgiref.headers')
     wsgiref.headers = headers
     sys.modules['wsgiref.headers'] = headers
@@ -79,6 +78,17 @@ except ImportError:
             pass
     headers.Headers = Headers
     print("⚠️ wsgiref stub created – backup may have limited functionality.")
+
+# ============================================
+# DEFINE STORAGE DIR EARLY (so backup can use it)
+# ============================================
+
+STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
+os.makedirs(STORAGE_DIR, exist_ok=True)
+
+MEMORY_DB = os.path.join(STORAGE_DIR, "ruby_memory.db")
+KNOWLEDGE_DB = os.path.join(STORAGE_DIR, "ruby_knowledge.db")
+HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 
 # ============================================
 # BACKUP SYSTEM (Gmail + Cloud) - OPTIONAL
@@ -160,15 +170,8 @@ router = BrainRouter(cloud_api_key=getattr(config, "GEMINI_API_KEY", None))
 brain_core = RubyBrainCore(api_key=getattr(config, "GEMINI_API_KEY", None))
 
 # ============================================
-# 2. INITIALIZE LOCAL MEMORY SYSTEM
+# 2. INITIALIZE LOCAL MEMORY SYSTEM (already defined above)
 # ============================================
-
-STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
-os.makedirs(STORAGE_DIR, exist_ok=True)
-
-MEMORY_DB = os.path.join(STORAGE_DIR, "ruby_memory.db")
-KNOWLEDGE_DB = os.path.join(STORAGE_DIR, "ruby_knowledge.db")
-HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 
 hybrid_memory = HybridMemorySystem(
     sqlite_path=MEMORY_DB,
