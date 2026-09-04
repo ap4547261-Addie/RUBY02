@@ -34,6 +34,15 @@ jobs:
         pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
         pip install flet-cli
 
+    # ---- THE FIX: configure pip globally ----
+    - name: Configure pip to use PyTorch index
+      run: |
+        mkdir -p ~/.pip
+        cat > ~/.pip/pip.conf << EOF
+        [global]
+        extra-index-url = https://download.pytorch.org/whl/cpu
+        EOF
+
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
@@ -60,8 +69,6 @@ jobs:
         GMAIL_CREDENTIANLS_JSON: ${{ secrets.GMAIL_CREDENTIANLS_JSON }}
         GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
         FLET_SUPPRESS_PROMPTS: "true"
-        # THE FIX: use environment variable instead of --pip-args
-        PIP_EXTRA_INDEX_URL: "https://download.pytorch.org/whl/cpu"
       run: |
         cat > config.py << EOF
         GEMINI_API_KEY1 = "$GEMINI_API_KEY1"
@@ -86,7 +93,6 @@ jobs:
         fi
 
         rm -rf build/ dist/ __pycache__/
-        # No --pip-args here – the environment variable is used
         flet build apk \
           --python-version 3.14 \
           --arch arm64-v8a \
