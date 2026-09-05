@@ -1,4 +1,4 @@
-# main.py - FINAL WITH GMAIL EMAIL DISPLAY (APK-ready)
+# main.py - FINAL WITH GMAIL SETUP BUTTON (APK-ready)
 import sys
 import os
 import traceback
@@ -86,6 +86,20 @@ except ImportError:
 STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
+# ============================================
+# AUTO-COPY token_gmail.pickle to storage on first run (fallback)
+# ============================================
+token_source = "token_gmail.pickle"
+token_dest = os.path.join(STORAGE_DIR, "token_gmail.pickle")
+if os.path.exists(token_source) and not os.path.exists(token_dest):
+    import shutil
+    shutil.copy(token_source, token_dest)
+    print(f"✅ token_gmail.pickle copied from {token_source} to {token_dest}")
+elif os.path.exists(token_dest):
+    print(f"✅ token_gmail.pickle already exists at {token_dest}")
+else:
+    print("ℹ️ token_gmail.pickle not found – you can connect Gmail from the app.")
+
 MEMORY_DB = os.path.join(STORAGE_DIR, "ruby_memory.db")
 KNOWLEDGE_DB = os.path.join(STORAGE_DIR, "ruby_knowledge.db")
 HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
@@ -112,40 +126,97 @@ def ensure_credentials():
             return "credentials.json"
     return None
 
-# Initialize Gmail backup
+# Initialize Gmail backup (will be None until token exists)
 from tools.gmail_backup import GmailBackup
 gmail = None
 gmail_email = "Not tied"
 credentials_file = ensure_credentials()
-if credentials_file:
-    try:
-        token_path = os.path.join(STORAGE_DIR, "token_gmail.pickle")
-        gmail = GmailBackup(
-            creds_file=credentials_file,
-            token_file=token_path
-        )
-        print("📧 Gmail backup ready.")
 
-        # Extract Gmail email from token
+# ============================================
+# GMAIL OAUTH SETUP (from within the app)
+# ============================================
+from google_auth_oauthlib.flow import InstalledAppFlow
+import webbrowser
+import pickle
+
+def start_gmail_oauth(page):
+    """Opens a dialog to connect Gmail via OAuth (run_console flow)."""
+    if not credentials_file or not os.path.exists(credentials_file):
+        page.snack_bar = ft.SnackBar(ft.Text("❌ credentials.json not found. Add GMAIL_CREDENTIANLS_JSON secret."))
+        page.snack_bar.open = True
+        page.update()
+        return
+
+    SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+    flow = InstalledAppFlow.from_client_secrets_file(credentials_file, SCOPES)
+    auth_url, _ = flow.authorization_url(prompt='consent')
+
+    # Create dialog
+    code_field = ft.TextField(hint_text="Paste authorization code here", width=300)
+    status_text = ft.Text("")
+
+    def submit_code(e):
+        code = code_field.value.strip()
+        if not code:
+            status_text.value = "❌ Please paste a code."
+            page.update()
+            return
         try:
-            if hasattr(gmail, 'creds') and gmail.creds:
-                if hasattr(gmail.creds, 'id_token') and gmail.creds.id_token:
-                    gmail_email = gmail.creds.id_token.get('email', 'Unknown')
-                else:
-                    # Fallback: try loading token directly
-                    import pickle
-                    if os.path.exists(token_path):
-                        with open(token_path, 'rb') as f:
-                            temp_creds = pickle.load(f)
-                        if hasattr(temp_creds, 'id_token') and temp_creds.id_token:
-                            gmail_email = temp_creds.id_token.get('email', 'Unknown')
-        except Exception as e:
-            print(f"⚠️ Could not extract Gmail email: {e}")
+            flow.fetch_token(code=code)
+            creds = flow.credentials
+            # Save token
+            token_path = os.path.join(STORAGE_DIR, "token_gmail.pickle")
+            with open(token_path, 'wb') as f:
+                pickle.dump(creds, f)
+            # Reinitialize Gmail
+            global gmail, gmail_email
+            gmail = GmailBackup(token_file=token_path)
+            if hasattr(creds, 'id_token') and creds.id_token:
+                gmail_email = creds.id_token.get('email', 'Unknown')
+            page.close_dialog()
+            page.snack_bar = ft.SnackBar(ft.Text(f"✅ Gmail connected: {gmail_email}"))
+            page.snack_bar.open = True
+            # Update header
+            update_header(page)
+            page.update()
+        except Exception as err:
+            status_text.value = f"❌ Error: {err}"
+            page.update()
 
-    except Exception as e:
-        print(f"⚠️ Gmail init error: {e}")
+    def open_url(e):
+        webbrowser.open(auth_url)
 
-# Initialize Cloud Storage backup
+    dialog = ft.AlertDialog(
+        title=ft.Text("Connect Gmail"),
+        content=ft.Column([
+            ft.Text("1. Open this URL in your browser:"),
+            ft.Text(auth_url, selectable=True, size=12),
+            ft.Row([
+                ft.TextButton("Open in Browser", on_click=open_url),
+            ]),
+            ft.Text("2. Log in and grant permission."),
+            ft.Text("3. Copy the authorization code and paste it below."),
+            code_field,
+            status_text,
+        ], tight=True, spacing=10),
+        actions=[
+            ft.TextButton("Submit", on_click=submit_code),
+            ft.TextButton("Cancel", on_click=lambda e: page.close_dialog()),
+        ],
+    )
+    page.open_dialog(dialog)
+
+def connect_gmail_button(page):
+    return ft.IconButton(
+        icon=ft.icons.GMAIL,
+        icon_color=ft.Colors.GREEN_400,
+        tooltip="Connect Gmail",
+        on_click=lambda e: start_gmail_oauth(page),
+    )
+
+# ============================================
+# Cloud Storage backup
+# ============================================
 from tools.cloud_backup import CloudBackup
 cloud = None
 cloud_creds_local = "service_account.json"
@@ -363,56 +434,20 @@ RUBY_PROMPT = build_ruby_prompt(0)
 ui_page_ref = None
 chat_list_ref = None
 status_label_ref = None
+header_ref = None
 
-def update_ruby_status():
-    if status_label_ref and ui_page_ref:
-        try:
-            status = router.energy.get_energy_status()
-            if router.energy.is_sleeping:
-                if router.energy.sleep_until:
-                    remaining = router.energy.sleep_until - datetime.now()
-                    hours = remaining.seconds // 3600
-                    minutes = (remaining.seconds % 3600) // 60
-                    status_label_ref.value = f"💤 Sleeping... {hours}h {minutes}m remaining"
-                else:
-                    status_label_ref.value = "💤 Sleeping..."
-            else:
-                energy_percent = int(status.get("energy", 100))
-                emoji = status.get("emoji", "✨")
-                remaining = status.get("remaining", 0)
-                status_label_ref.value = f"{emoji} {energy_percent}% - {status.get('message', 'Awake')}"
-                if remaining > 0:
-                    status_label_ref.value += f" ({remaining} left)"
-            ui_page_ref.update()
-        except Exception as e:
-            print(f"Status update error: {e}")
-
-def add_message(sender, text, is_user=False, image_path=None):
-    if chat_list_ref and ui_page_ref:
-        controls_list = [
-            ft.Text(sender, size=11, weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.AMBER_400 if is_user else ft.Colors.CYAN_400),
-            ft.Text(text, size=14, color=ft.Colors.WHITE)
-        ]
-        if image_path and os.path.exists(image_path):
-            controls_list.append(
-                ft.Image(src=image_path, width=256, height=256, border_radius=8, fit=ft.BoxFit.CONTAIN)
-            )
-        bubble = ft.Container(
-            content=ft.Column(controls_list, spacing=6),
-            bgcolor="#1E1E24" if not is_user else "#2A2A36",
-            padding=12,
-            border_radius=8,
-        )
-        chat_list_ref.controls.append(bubble)
-        ui_page_ref.update()
+def update_header(page):
+    """Update the header text with current Gmail email."""
+    if header_ref:
+        header_ref.content.controls[0].value = f"RUBY // {gmail_email}"
+        page.update()
 
 # ============================================
 # 12. MAIN UI (Vision commands removed)
 # ============================================
 
 def main_app_ui(page: ft.Page):
-    global ui_page_ref, chat_list_ref, conversation_history, status_label_ref
+    global ui_page_ref, chat_list_ref, conversation_history, status_label_ref, header_ref
     ui_page_ref = page
     
     page.title = "Ruby"
@@ -492,14 +527,14 @@ def main_app_ui(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # Header now includes Gmail email
-    header = ft.Container(
-        content=ft.Row([
-            ft.Text(f"RUBY // {gmail_email}", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
-            status_label
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-        padding=5
-    )
+    # Header with Gmail connect button
+    header_row = ft.Row([
+        ft.Text(f"RUBY // {gmail_email}", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
+        status_label,
+        connect_gmail_button(page),
+    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+    header = ft.Container(content=header_row, padding=5)
+    header_ref = header
 
     page.add(
         ft.Column([
