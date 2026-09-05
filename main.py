@@ -240,7 +240,7 @@ def start_gmail_oauth(page):
 
 def connect_gmail_button(page):
     return ft.IconButton(
-        icon=ft.icons.GMAIL,
+        icon=ft.icons.EMAIL,
         icon_color=ft.Colors.GREEN_400,
         tooltip="Connect Gmail",
         on_click=lambda e: start_gmail_oauth(page),
