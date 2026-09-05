@@ -1,4 +1,4 @@
-# main.py - FINAL WITH GMAIL SETUP BUTTON (APK-ready)
+# main.py -
 import sys
 import os
 import traceback
@@ -61,15 +61,20 @@ from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 # from tools.vision import VisionEngine
 
 # ============================================
-# WSGIRef stub – ensures backup imports don't crash on Android
+# WSGIRef stub (package version) – ensures backup imports don't crash on Android
 # ============================================
 try:
     import wsgiref
 except ImportError:
     import sys
     from types import ModuleType
+
+    # Create the main wsgiref package
     wsgiref = ModuleType('wsgiref')
+    wsgiref.__path__ = []   # mark as a package
     sys.modules['wsgiref'] = wsgiref
+
+    # Create wsgiref.headers submodule
     headers = ModuleType('wsgiref.headers')
     wsgiref.headers = headers
     sys.modules['wsgiref.headers'] = headers
@@ -77,7 +82,34 @@ except ImportError:
         def __init__(self, *args, **kwargs):
             pass
     headers.Headers = Headers
-    print("⚠️ wsgiref stub created – backup may have limited functionality.")
+
+    # Create wsgiref.simple_server submodule (required by google_auth_oauthlib)
+    simple_server = ModuleType('wsgiref.simple_server')
+    wsgiref.simple_server = simple_server
+    sys.modules['wsgiref.simple_server'] = simple_server
+
+    # Provide minimal dummy classes/functions
+    class WSGIServer:
+        def __init__(self, *args, **kwargs):
+            pass
+    class WSGIRequestHandler:
+        def __init__(self, *args, **kwargs):
+            pass
+    def make_server(*args, **kwargs):
+        return WSGIServer()
+    simple_server.WSGIServer = WSGIServer
+    simple_server.WSGIRequestHandler = WSGIRequestHandler
+    simple_server.make_server = make_server
+
+    # Create wsgiref.util submodule (if needed)
+    util = ModuleType('wsgiref.util')
+    wsgiref.util = util
+    sys.modules['wsgiref.util'] = util
+    def guess_scheme(environ):
+        return 'http'
+    util.guess_scheme = guess_scheme
+
+    print("⚠️ wsgiref stub (package) created – backup may have limited functionality.")
 
 # ============================================
 # DEFINE STORAGE DIR EARLY (so backup can use it)
