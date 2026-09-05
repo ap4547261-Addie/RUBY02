@@ -1,4 +1,4 @@
-# engine/router.py
+# engine/router.py - HYBRID: local Q&A first, then Gemini, with learning
 import os
 import json
 import time
@@ -7,7 +7,6 @@ import threading
 import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
-from collections import deque
 import random
 
 
@@ -303,7 +302,7 @@ class BrainRouter:
             return False
 
     def _call_local_brain(self, messages, context=None):
-        """Search local Q&A memory first, then fall back to previous questions."""
+        """Only return a direct Q&A match. No fallback to previous questions."""
         try:
             from main import hybrid_memory
         except ImportError:
@@ -318,7 +317,7 @@ class BrainRouter:
         if not last_user_msg:
             return None
 
-        # Save user message (automatic learning)
+        # Save user message for learning (always)
         if "?" in last_user_msg:
             hybrid_memory.save_hybrid_memory(
                 f"User asked: {last_user_msg}",
@@ -332,29 +331,15 @@ class BrainRouter:
                 category="user_messages"
             )
 
-        # 1. Search for a stored Q&A pair that matches the user question
+        # Search for a stored Q&A pair
         memories = hybrid_memory.search_memories(last_user_msg)
-        # memories is a list of strings (the memory content)
-        # We can also get similarity scores if the method returns them,
-        # but we assume the first result is the most relevant.
         for mem in memories:
-            if mem.startswith("Q: "):
-                # Extract the answer part
-                if "\nA: " in mem:
-                    answer = mem.split("\nA: ", 1)[1]
-                    # Only use if the question part is similar enough (optional threshold)
-                    return answer
-                # If no answer part, skip
+            if mem.startswith("Q: ") and "\nA: " in mem:
+                # Extract answer
+                answer = mem.split("\nA: ", 1)[1]
+                return answer
 
-        # 2. If no Q&A found, try to ask a previous question (to keep conversation flowing)
-        questions = hybrid_memory.get_memories_by_category("user_questions")
-        if questions:
-            question = random.choice(questions)
-            if question.startswith("User asked: "):
-                question = question[len("User asked: "):]
-            return question
-
-        # 3. Ultimate fallback
+        # No direct match – return None so we call Gemini
         return None
 
     def _call_cloud(self, messages, personality=None):
@@ -408,29 +393,26 @@ class BrainRouter:
         return False
 
     def route_request(self, messages, personality=None, use_cloud_preferred=True):
-        """Cloud first, then store Q&A for future local use."""
+        """Hybrid: local Q&A first, then Gemini, then fallback."""
         # 1. Energy check
         if not self.energy.is_available():
             if self.energy.is_sleeping:
                 if self.energy.sleep_until and datetime.now() < self.energy.sleep_until:
                     return {
                         "source": "sleeping",
-                        "response": self._call_local_brain(messages) or "💤"
+                        "response": "💤"
                     }
                 else:
                     self.energy._wake_up()
                     return {
                         "source": "waking_up",
-                        "response": self._call_local_brain(messages) or "✨"
+                        "response": "✨"
                     }
             self.energy._go_to_sleep()
             return {
                 "source": "going_to_sleep",
-                "response": self._call_local_brain(messages) or "💤"
+                "response": "💤"
             }
-
-        status = self.energy.get_energy_status()
-        is_tired = status["status"] in ["tired", "very_tired"]
 
         last_user_msg = None
         for msg in reversed(messages):
@@ -438,14 +420,14 @@ class BrainRouter:
                 last_user_msg = msg.get("content", "")
                 break
 
-        # 2. Try local brain first (fast, no API)
-        local_response = self._call_local_brain(messages)
-        if local_response is not None:
-            # Save Ruby's reply (local)
+        # 2. Try local brain first (direct Q&A match)
+        local_answer = self._call_local_brain(messages)
+        if local_answer is not None:
+            # Save local reply as a memory (for learning)
             try:
                 from main import hybrid_memory
                 hybrid_memory.save_hybrid_memory(
-                    f"Ruby replied: {local_response}",
+                    f"Ruby replied (local): {local_answer}",
                     importance=2,
                     category="ruby_responses"
                 )
@@ -453,11 +435,11 @@ class BrainRouter:
                 pass
             return {
                 "source": "local_brain",
-                "response": local_response
+                "response": local_answer
             }
 
-        # 3. If no local answer, try cloud (Gemini) – but only if not too tired for complex stuff
-        if use_cloud_preferred and not (is_tired and self._is_complex_question(last_user_msg)):
+        # 3. No local match – try Gemini
+        if use_cloud_preferred:
             chat_key = self.energy.get_chat_key()
             if chat_key is not None:
                 self.cloud_api_key = chat_key
@@ -480,17 +462,15 @@ class BrainRouter:
 
                             self.energy.conversations_today += 1
 
-                            # Store the Q&A pair for future local learning
+                            # Store Q&A for future learning
                             try:
                                 from main import hybrid_memory
                                 if last_user_msg:
-                                    # Store as a Q&A pair
                                     hybrid_memory.save_hybrid_memory(
                                         f"Q: {last_user_msg}\nA: {response}",
                                         importance=3,
                                         category="qa_pair"
                                     )
-                                    # Also store separately for general learning
                                     hybrid_memory.save_hybrid_memory(
                                         f"User asked: {last_user_msg}",
                                         importance=3,
@@ -546,8 +526,22 @@ class BrainRouter:
                         print("======================================")
                         break
 
-        # 4. Ultimate fallback (if cloud fails or is not preferred)
+        # 4. Fallback: ask a previous question (only if Gemini failed)
+        try:
+            from main import hybrid_memory
+            questions = hybrid_memory.get_memories_by_category("user_questions")
+            if questions:
+                question = random.choice(questions)
+                if question.startswith("User asked: "):
+                    question = question[len("User asked: "):]
+                return {
+                    "source": "fallback",
+                    "response": question
+                }
+        except:
+            pass
+
         return {
             "source": "fallback",
-            "response": "I'm not sure how to answer that. Can you ask something else?"
+            "response": "I'm not sure how to answer that."
         }
