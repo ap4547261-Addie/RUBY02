@@ -1,4 +1,4 @@
-# main.py -
+# main.py 
 import sys
 import os
 import traceback
@@ -239,6 +239,7 @@ def start_gmail_oauth(page):
     page.open_dialog(dialog)
 
 def connect_gmail_button(page):
+    # Use a text button to avoid icon constant errors
     return ft.TextButton(
         "Connect Gmail",
         on_click=lambda e: start_gmail_oauth(page),
@@ -467,11 +468,54 @@ chat_list_ref = None
 status_label_ref = None
 header_ref = None
 
+def update_ruby_status():
+    if status_label_ref and ui_page_ref:
+        try:
+            status = router.energy.get_energy_status()
+            if router.energy.is_sleeping:
+                if router.energy.sleep_until:
+                    remaining = router.energy.sleep_until - datetime.now()
+                    hours = remaining.seconds // 3600
+                    minutes = (remaining.seconds % 3600) // 60
+                    status_label_ref.value = f"💤 Sleeping... {hours}h {minutes}m remaining"
+                else:
+                    status_label_ref.value = "💤 Sleeping..."
+            else:
+                energy_percent = int(status.get("energy", 100))
+                emoji = status.get("emoji", "✨")
+                remaining = status.get("remaining", 0)
+                status_label_ref.value = f"{emoji} {energy_percent}% - {status.get('message', 'Awake')}"
+                if remaining > 0:
+                    status_label_ref.value += f" ({remaining} left)"
+            ui_page_ref.update()
+        except Exception as e:
+            print(f"Status update error: {e}")
+
 def update_header(page):
     """Update the header text with current Gmail email."""
     if header_ref:
         header_ref.content.controls[0].value = f"RUBY // {gmail_email}"
         page.update()
+
+def add_message(sender, text, is_user=False, image_path=None):
+    if chat_list_ref and ui_page_ref:
+        controls_list = [
+            ft.Text(sender, size=11, weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.AMBER_400 if is_user else ft.Colors.CYAN_400),
+            ft.Text(text, size=14, color=ft.Colors.WHITE)
+        ]
+        if image_path and os.path.exists(image_path):
+            controls_list.append(
+                ft.Image(src=image_path, width=256, height=256, border_radius=8, fit=ft.BoxFit.CONTAIN)
+            )
+        bubble = ft.Container(
+            content=ft.Column(controls_list, spacing=6),
+            bgcolor="#1E1E24" if not is_user else "#2A2A36",
+            padding=12,
+            border_radius=8,
+        )
+        chat_list_ref.controls.append(bubble)
+        ui_page_ref.update()
 
 # ============================================
 # 12. MAIN UI (Vision commands removed)
@@ -558,7 +602,7 @@ def main_app_ui(page: ft.Page):
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
-    # Header with Gmail connect button
+    # Header with Gmail connect button (text button)
     header_row = ft.Row([
         ft.Text(f"RUBY // {gmail_email}", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
         status_label,
