@@ -239,11 +239,10 @@ def start_gmail_oauth(page):
     page.open_dialog(dialog)
 
 def connect_gmail_button(page):
-    return ft.IconButton(
-        icon=ft.icons.EMAIL,
-        icon_color=ft.Colors.GREEN_400,
-        tooltip="Connect Gmail",
+    return ft.TextButton(
+        "Connect Gmail",
         on_click=lambda e: start_gmail_oauth(page),
+        style=ft.ButtonStyle(color=ft.Colors.GREEN_400),
     )
 
 # ============================================
