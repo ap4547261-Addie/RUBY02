@@ -1,4 +1,4 @@
-# engine/router.py - HYBRID: local Q&A first, then Gemini, with learning
+# engine/router.py - GEMINI ONLY (for testing)
 import os
 import json
 import time
@@ -294,54 +294,6 @@ class BrainRouter:
             "v1beta/models/gemini-2.0-flash-exp:generateContent"
         )
 
-    def _is_connected(self):
-        try:
-            socket.create_connection(("8.8.8.8", 53), timeout=2)
-            return True
-        except OSError:
-            return False
-
-    def _call_local_brain(self, messages, context=None):
-        """Only return a direct Q&A match. No fallback to previous questions."""
-        try:
-            from main import hybrid_memory
-        except ImportError:
-            return None
-
-        last_user_msg = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                last_user_msg = msg.get("content", "")
-                break
-
-        if not last_user_msg:
-            return None
-
-        # Save user message for learning (always)
-        if "?" in last_user_msg:
-            hybrid_memory.save_hybrid_memory(
-                f"User asked: {last_user_msg}",
-                importance=3,
-                category="user_questions"
-            )
-        else:
-            hybrid_memory.save_hybrid_memory(
-                f"User said: {last_user_msg}",
-                importance=2,
-                category="user_messages"
-            )
-
-        # Search for a stored Q&A pair
-        memories = hybrid_memory.search_memories(last_user_msg)
-        for mem in memories:
-            if mem.startswith("Q: ") and "\nA: " in mem:
-                # Extract answer
-                answer = mem.split("\nA: ", 1)[1]
-                return answer
-
-        # No direct match – return None so we call Gemini
-        return None
-
     def _call_cloud(self, messages, personality=None):
         if not self.cloud_api_key:
             return None
@@ -383,17 +335,8 @@ class BrainRouter:
             print(f"Cloud call error: {e}")
             return None
 
-    def _is_complex_question(self, text):
-        if not text:
-            return False
-        if len(text.split()) > 15:
-            return True
-        if any(keyword in text.lower() for keyword in ["code", "function", "api", "explain", "how", "why", "what"]):
-            return True
-        return False
-
     def route_request(self, messages, personality=None, use_cloud_preferred=True):
-        """Hybrid: local Q&A first, then Gemini, then fallback."""
+        """Gemini only – local brain is disabled for testing."""
         # 1. Energy check
         if not self.energy.is_available():
             if self.energy.is_sleeping:
@@ -414,134 +357,66 @@ class BrainRouter:
                 "response": "💤"
             }
 
-        last_user_msg = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                last_user_msg = msg.get("content", "")
-                break
-
-        # 2. Try local brain first (direct Q&A match)
-        local_answer = self._call_local_brain(messages)
-        if local_answer is not None:
-            # Save local reply as a memory (for learning)
-            try:
-                from main import hybrid_memory
-                hybrid_memory.save_hybrid_memory(
-                    f"Ruby replied (local): {local_answer}",
-                    importance=2,
-                    category="ruby_responses"
-                )
-            except:
-                pass
+        # 2. Always call Gemini (no local brain)
+        chat_key = self.energy.get_chat_key()
+        if chat_key is None:
+            self.energy._go_to_sleep()
             return {
-                "source": "local_brain",
-                "response": local_answer
+                "source": "going_to_sleep",
+                "response": "💤"
             }
 
-        # 3. No local match – try Gemini
-        if use_cloud_preferred:
-            chat_key = self.energy.get_chat_key()
-            if chat_key is not None:
-                self.cloud_api_key = chat_key
+        self.cloud_api_key = chat_key
 
-                max_retries = 3
-                backoff_delay = 3
-
-                for attempt in range(max_retries):
-                    try:
-                        print("========== GEMINI REQUEST ==========")
-                        print(f"Attempt: {attempt + 1}")
-                        print("====================================")
-
-                        response = self._call_cloud(messages, personality)
-
-                        if response:
-                            print("========== GEMINI SUCCESS ==========")
-                            print(f"Attempt: {attempt + 1}")
-                            print("====================================")
-
-                            self.energy.conversations_today += 1
-
-                            # Store Q&A for future learning
-                            try:
-                                from main import hybrid_memory
-                                if last_user_msg:
-                                    hybrid_memory.save_hybrid_memory(
-                                        f"Q: {last_user_msg}\nA: {response}",
-                                        importance=3,
-                                        category="qa_pair"
-                                    )
-                                    hybrid_memory.save_hybrid_memory(
-                                        f"User asked: {last_user_msg}",
-                                        importance=3,
-                                        category="user_questions"
-                                    )
-                                hybrid_memory.save_hybrid_memory(
-                                    f"Ruby replied: {response}",
-                                    importance=2,
-                                    category="ruby_responses"
-                                )
-                            except:
-                                pass
-
-                            if self.energy.get_energy_status()["energy"] < 20:
-                                response += "\n\nUgh, that took a lot out of me... I'm getting tired."
-
-                            return {
-                                "source": "cloud",
-                                "response": response
-                            }
-
-                    except urllib.error.HTTPError as e:
-                        status_code = e.code
-                        try:
-                            error_message = e.read().decode("utf-8")
-                        except:
-                            error_message = str(e)
-
-                        print("========== GEMINI HTTP ERROR ==========")
-                        print(f"Status: {status_code}")
-                        print(error_message)
-                        print("========================================")
-
-                        if status_code == 429:
-                            with self.energy.lock:
-                                if chat_key in self.energy.chat_usage:
-                                    self.energy.chat_usage[chat_key]["count"] = 20
-                            continue
-
-                        if status_code == 503:
-                            if attempt < max_retries - 1:
-                                print(f"Retrying in {backoff_delay}s...")
-                                time.sleep(backoff_delay)
-                                backoff_delay *= 2
-                                continue
-
-                        # If cloud fails, break to fallback
-                        break
-
-                    except Exception as e:
-                        print("========== UNEXPECTED ERROR ==========")
-                        print(str(e))
-                        print("======================================")
-                        break
-
-        # 4. Fallback: ask a previous question (only if Gemini failed)
         try:
-            from main import hybrid_memory
-            questions = hybrid_memory.get_memories_by_category("user_questions")
-            if questions:
-                question = random.choice(questions)
-                if question.startswith("User asked: "):
-                    question = question[len("User asked: "):]
-                return {
-                    "source": "fallback",
-                    "response": question
-                }
-        except:
-            pass
+            print("========== GEMINI REQUEST ==========")
+            print(f"Using key: {self.cloud_api_key[:10]}...")
+            response = self._call_cloud(messages, personality)
+            if response:
+                print("========== GEMINI SUCCESS ==========")
+                # Store Q&A for future learning (optional)
+                try:
+                    from main import hybrid_memory
+                    last_user_msg = None
+                    for msg in reversed(messages):
+                        if msg.get("role") == "user":
+                            last_user_msg = msg.get("content", "")
+                            break
+                    if last_user_msg:
+                        hybrid_memory.save_hybrid_memory(
+                            f"Q: {last_user_msg}\nA: {response}",
+                            importance=3,
+                            category="qa_pair"
+                        )
+                        hybrid_memory.save_hybrid_memory(
+                            f"User asked: {last_user_msg}",
+                            importance=3,
+                            category="user_questions"
+                        )
+                    hybrid_memory.save_hybrid_memory(
+                        f"Ruby replied: {response}",
+                        importance=2,
+                        category="ruby_responses"
+                    )
+                except:
+                    pass
 
-        return {
-            "source": "fallback",
-            "response": "I'm not sure how to answer that."
-        }
+                # If energy is low, append a tired message
+                if self.energy.get_energy_status()["energy"] < 20:
+                    response += "\n\nUgh, that took a lot out of me... I'm getting tired."
+
+                return {
+                    "source": "cloud",
+                    "response": response
+                }
+            else:
+                return {
+                    "source": "cloud_error",
+                    "response": "Gemini returned no response."
+                }
+        except Exception as e:
+            print(f"Gemini error: {e}")
+            return {
+                "source": "cloud_error",
+                "response": f"Error: {str(e)}"
+            }
