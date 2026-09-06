@@ -1,4 +1,4 @@
-# main.py - COMPLETE WITH KEY EXPORT AND ALL FIXES
+# main.py - COMPLETE WITH KEY EXPORT, DEBUG, AND ALL FIXES
 import sys
 import os
 import traceback
@@ -57,14 +57,23 @@ from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 
 # ============================================
 # FIX: Export Gemini keys from config.py to environment
-# so both BrainRouter and RubyBrainCore can access them.
+# and print debug info to verify keys are loaded.
 # ============================================
 key_names = ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY{i}" for i in range(1, 10)]
+print("=== GEMINI KEYS DEBUG ===")
 for name in key_names:
     val = getattr(config, name, None)
-    if val and not os.getenv(name):
+    env_val = os.getenv(name)
+    if val and not env_val:
         os.environ[name] = val
-        print(f"🔑 Exported {name} to environment.")
+        print(f"🔑 Exported {name} to environment (value starts with: {val[:10]}...)")
+    elif val and env_val:
+        print(f"✅ {name} already in environment (value starts with: {env_val[:10]}...)")
+    elif not val and env_val:
+        print(f"ℹ️ {name} found only in environment (value starts with: {env_val[:10]}...)")
+    else:
+        print(f"❌ {name} not found in config or environment!")
+print("=========================")
 
 # ============================================
 # VISION SYSTEM DISABLED
