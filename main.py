@@ -1,4 +1,4 @@
-# main.py 
+# main.py - COMPLETE WITH KEY EXPORT AND ALL FIXES
 import sys
 import os
 import traceback
@@ -54,6 +54,17 @@ from tools.instagram_connector import InstagramConnector
 from tools.websocket_handler import WebSocketHandler
 from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
+
+# ============================================
+# FIX: Export Gemini keys from config.py to environment
+# so both BrainRouter and RubyBrainCore can access them.
+# ============================================
+key_names = ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY{i}" for i in range(1, 10)]
+for name in key_names:
+    val = getattr(config, name, None)
+    if val and not os.getenv(name):
+        os.environ[name] = val
+        print(f"🔑 Exported {name} to environment.")
 
 # ============================================
 # VISION SYSTEM DISABLED
