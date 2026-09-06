@@ -6,23 +6,47 @@ on:
 jobs:
   inject:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract all ZIP files into training_data/
+        run: |
+          # Create the training_data folder if it doesn't exist
+          mkdir -p training_data
+
+          # Find all .zip files in the root and extract them into training_data/
+          for zipfile in *.zip; do
+            if [ -f "$zipfile" ]; then
+              echo "Extracting $zipfile ..."
+              unzip -o "$zipfile" -d training_data/
+              # Remove the ZIP after extraction (optional – uncomment if you want to keep repo clean)
+              # rm "$zipfile"
+            fi
+          done
+
+          # Remove the placeholder .keep file if it exists (it's no longer needed)
+          rm -f training_data/.keep
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - name: Install dependencies
         run: |
           pip install google-generativeai
-      - name: Run injection
+
+      - name: Run injection script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python inject_all.py
+
       - name: Commit updated database
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
           git add ruby_memory.db
-          git commit -m "Update ruby_memory.db with training data" || echo "No changes"
+          git commit -m "Update ruby_memory.db with training data" || echo "No changes to commit"
           git push
