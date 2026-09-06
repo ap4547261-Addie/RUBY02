@@ -13,20 +13,16 @@ jobs:
 
       - name: Extract all ZIP files into training_data/
         run: |
-          # Create the training_data folder if it doesn't exist
           mkdir -p training_data
-
-          # Find all .zip files in the root and extract them into training_data/
           for zipfile in *.zip; do
             if [ -f "$zipfile" ]; then
               echo "Extracting $zipfile ..."
               unzip -o "$zipfile" -d training_data/
-              # Remove the ZIP after extraction (optional – uncomment if you want to keep repo clean)
+              # Optionally remove the ZIP after extraction (uncomment if you want)
               # rm "$zipfile"
             fi
           done
-
-          # Remove the placeholder .keep file if it exists (it's no longer needed)
+          # Remove placeholder .keep if it exists
           rm -f training_data/.keep
 
       - name: Set up Python
