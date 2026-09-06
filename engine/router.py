@@ -1,4 +1,4 @@
-# engine/router.py - GEMINI ONLY (for testing)
+# engine/router.py - HYBRID with Conversation Profile Learning
 import os
 import json
 import time
@@ -9,29 +9,41 @@ import urllib.error
 from datetime import datetime, timedelta
 import random
 
+# Import the profile tracker
+from tools.profile import ConversationProfile
+
+try:
+    import config
+except ImportError:
+    config = None
+
 
 class RubyEnergySystem:
-    """Ruby's personality-driven energy management with 9 keys"""
+    """Energy management with 9 keys – only limit is Gemini quota (20 requests/key/day)"""
 
     def __init__(self):
         self.chat_keys = []
         self.image_keys = []
 
-        # Keys 1-4 for chat
+        def get_key(name):
+            if config is not None:
+                val = getattr(config, name, None)
+                if val:
+                    return val
+            return os.getenv(name)
+
         for i in range(1, 5):
-            key = os.getenv(f"GEMINI_API_KEY{i}")
+            key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.chat_keys.append(key)
 
-        # Keys 5-9 for image generation
         for i in range(5, 10):
-            key = os.getenv(f"GEMINI_API_KEY{i}")
+            key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.image_keys.append(key)
 
-        # Fallback to single key
         if not self.chat_keys and not self.image_keys:
-            fallback = os.getenv("GEMINI_API_KEY")
+            fallback = get_key("GEMINI_API_KEY")
             if fallback:
                 self.chat_keys = [fallback]
                 self.image_keys = [fallback]
@@ -74,7 +86,7 @@ class RubyEnergySystem:
 
             for _ in range(len(self.chat_keys)):
                 key = self.chat_keys[self.chat_index]
-                if self.chat_usage[key]["count"] < 20:
+                if self.chat_usage[key]["count"] < 20:   # Gemini free tier limit
                     self.chat_usage[key]["count"] += 1
                     self.chat_index = (self.chat_index + 1) % len(self.chat_keys)
                     print(f"Using chat key {key[:10]}... (count: {self.chat_usage[key]['count']}/20)")
@@ -158,11 +170,8 @@ class RubyEnergySystem:
 
         self._sync_and_reset()
 
-        try:
-            from main import hybrid_memory
-            hybrid_memory.compress_memories(days_threshold=30)
-        except Exception as e:
-            print(f"⚠️ Memory compression failed: {e}")
+        # --- Memory compression removed: ALL memories are kept forever ---
+        # No call to hybrid_memory.compress_memories()
 
         try:
             from main import gmail, cloud, MEMORY_DB, KNOWLEDGE_DB
@@ -281,18 +290,58 @@ class RubyEnergySystem:
 
 
 class BrainRouter:
-    def __init__(self, cloud_api_key=None, local_model_path=None):
+    def __init__(self, cloud_api_key=None, local_model_path=None, user_id="default_user"):
         self.energy = RubyEnergySystem()
         self.local_model_path = local_model_path
         self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
-
-        if self.energy.chat_keys:
+        if not self.cloud_api_key and self.energy.chat_keys:
             self.cloud_api_key = self.energy.chat_keys[0]
 
-        self.cloud_url = (
-            "https://generativelanguage.googleapis.com/"
-            "v1beta/models/gemini-2.0-flash-exp:generateContent"
-        )
+        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+
+        # Initialize conversation profile tracker
+        self.profile = ConversationProfile()
+        self.user_id = user_id   # can be overridden per request
+
+    def _call_local_brain(self, messages, context=None):
+        try:
+            from main import hybrid_memory
+        except ImportError:
+            return None
+
+        last_user_msg = None
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                last_user_msg = msg.get("content", "")
+                break
+
+        if not last_user_msg:
+            return None
+
+        # Save user message for learning (always)
+        if "?" in last_user_msg:
+            hybrid_memory.save_hybrid_memory(
+                f"User asked: {last_user_msg}",
+                importance=3,
+                category="user_questions"
+            )
+        else:
+            hybrid_memory.save_hybrid_memory(
+                f"User said: {last_user_msg}",
+                importance=2,
+                category="user_messages"
+            )
+
+        # Search for a stored Q&A pair
+        memories = hybrid_memory.search_memories(last_user_msg)
+        for mem in memories:
+            if mem.startswith("Q: ") and "\nA: " in mem:
+                # Extract answer
+                answer = mem.split("\nA: ", 1)[1]
+                return answer
+
+        # No direct match – return None so we call Gemini
+        return None
 
     def _call_cloud(self, messages, personality=None):
         if not self.cloud_api_key:
@@ -301,10 +350,7 @@ class BrainRouter:
         contents = []
         for msg in messages:
             role = "user" if msg.get("role") == "user" else "model"
-            contents.append({
-                "role": role,
-                "parts": [{"text": msg.get("content", "")}]
-            })
+            contents.append({"role": role, "parts": [{"text": msg.get("content", "")}]})
 
         url = f"{self.cloud_url}?key={self.cloud_api_key}"
         headers = {"Content-Type": "application/json"}
@@ -317,106 +363,151 @@ class BrainRouter:
                 "maxOutputTokens": 1024,
             }
         }
-
         if personality:
             data["systemInstruction"] = {"parts": [{"text": personality}]}
 
         req = urllib.request.Request(url, data=json.dumps(data).encode("utf-8"), headers=headers, method="POST")
-
         try:
             with urllib.request.urlopen(req, timeout=30) as response:
                 response_data = json.loads(response.read().decode("utf-8"))
                 if "candidates" in response_data and response_data["candidates"]:
                     return response_data["candidates"][0]["content"]["parts"][0]["text"].strip()
                 return None
-        except urllib.error.HTTPError as e:
-            raise e
         except Exception as e:
             print(f"Cloud call error: {e}")
-            return None
+            raise
 
-    def route_request(self, messages, personality=None, use_cloud_preferred=True):
-        """Gemini only – local brain is disabled for testing."""
-        # 1. Energy check
+    def _get_style_instruction(self, user_id):
+        """Build a style instruction from the user's conversation profile."""
+        stats = self.profile.get_stats(user_id)
+        if stats and stats['total_turns'] > 3:   # only adapt after a few exchanges
+            return self.profile.build_style_instruction(stats)
+        return ""
+
+    def route_request(self, messages, personality=None, use_cloud_preferred=True, user_id=None):
+        # Use provided user_id or fallback to default
+        uid = user_id if user_id else self.user_id
+
+        # Energy check
         if not self.energy.is_available():
             if self.energy.is_sleeping:
                 if self.energy.sleep_until and datetime.now() < self.energy.sleep_until:
-                    return {
-                        "source": "sleeping",
-                        "response": "💤"
-                    }
+                    return {"source": "sleeping", "response": "💤"}
                 else:
                     self.energy._wake_up()
-                    return {
-                        "source": "waking_up",
-                        "response": "✨"
-                    }
+                    return {"source": "waking_up", "response": "✨"}
             self.energy._go_to_sleep()
-            return {
-                "source": "going_to_sleep",
-                "response": "💤"
-            }
+            return {"source": "going_to_sleep", "response": "💤"}
 
-        # 2. Always call Gemini (no local brain)
-        chat_key = self.energy.get_chat_key()
-        if chat_key is None:
-            self.energy._go_to_sleep()
-            return {
-                "source": "going_to_sleep",
-                "response": "💤"
-            }
+        last_user_msg = None
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                last_user_msg = msg.get("content", "")
+                break
 
-        self.cloud_api_key = chat_key
+        # Try local brain first (Q&A match)
+        local_answer = self._call_local_brain(messages)
+        if local_answer is not None:
+            # Update profile with this exchange (user msg + local reply)
+            if last_user_msg:
+                self.profile.update(uid, last_user_msg, local_answer)
+            try:
+                from main import hybrid_memory
+                hybrid_memory.save_hybrid_memory(
+                    f"Ruby replied (local): {local_answer}",
+                    importance=2,
+                    category="ruby_responses"
+                )
+            except:
+                pass
+            return {"source": "local_brain", "response": local_answer}
 
+        # No local match – try Gemini
+        if use_cloud_preferred:
+            chat_key = self.energy.get_chat_key()
+            if chat_key is not None:
+                self.cloud_api_key = chat_key
+                # Inject style instruction into personality
+                style_instr = self._get_style_instruction(uid)
+                if style_instr:
+                    if personality is None:
+                        personality = ""
+                    # Append style instruction to the system prompt
+                    personality += "\n\n" + style_instr
+
+                max_retries = 3
+                backoff_delay = 3
+                for attempt in range(max_retries):
+                    try:
+                        print("========== GEMINI REQUEST ==========")
+                        print(f"Attempt: {attempt + 1}")
+                        response = self._call_cloud(messages, personality)
+                        if response:
+                            print("========== GEMINI SUCCESS ==========")
+                            self.energy.conversations_today += 1
+                            # Update profile
+                            if last_user_msg:
+                                self.profile.update(uid, last_user_msg, response)
+                            # Store Q&A for future learning
+                            try:
+                                from main import hybrid_memory
+                                if last_user_msg:
+                                    hybrid_memory.save_hybrid_memory(
+                                        f"Q: {last_user_msg}\nA: {response}",
+                                        importance=3,
+                                        category="qa_pair"
+                                    )
+                                    hybrid_memory.save_hybrid_memory(
+                                        f"User asked: {last_user_msg}",
+                                        importance=3,
+                                        category="user_questions"
+                                    )
+                                hybrid_memory.save_hybrid_memory(
+                                    f"Ruby replied: {response}",
+                                    importance=2,
+                                    category="ruby_responses"
+                                )
+                            except:
+                                pass
+                            if self.energy.get_energy_status()["energy"] < 20:
+                                response += "\n\nUgh, that took a lot out of me... I'm getting tired."
+                            return {"source": "cloud", "response": response}
+                    except urllib.error.HTTPError as e:
+                        status_code = e.code
+                        try:
+                            error_message = e.read().decode("utf-8")
+                        except:
+                            error_message = str(e)
+                        print(f"HTTP Error {status_code}: {error_message}")
+                        if status_code == 429:
+                            with self.energy.lock:
+                                if chat_key in self.energy.chat_usage:
+                                    self.energy.chat_usage[chat_key]["count"] = 20
+                            continue
+                        if status_code == 503:
+                            if attempt < max_retries - 1:
+                                print(f"Retrying in {backoff_delay}s...")
+                                time.sleep(backoff_delay)
+                                backoff_delay *= 2
+                                continue
+                        break
+                    except Exception as e:
+                        print(f"Unexpected error: {e}")
+                        break
+
+        # Fallback: ask a previous question (only if Gemini failed)
         try:
-            print("========== GEMINI REQUEST ==========")
-            print(f"Using key: {self.cloud_api_key[:10]}...")
-            response = self._call_cloud(messages, personality)
-            if response:
-                print("========== GEMINI SUCCESS ==========")
-                # Store Q&A for future learning (optional)
-                try:
-                    from main import hybrid_memory
-                    last_user_msg = None
-                    for msg in reversed(messages):
-                        if msg.get("role") == "user":
-                            last_user_msg = msg.get("content", "")
-                            break
-                    if last_user_msg:
-                        hybrid_memory.save_hybrid_memory(
-                            f"Q: {last_user_msg}\nA: {response}",
-                            importance=3,
-                            category="qa_pair"
-                        )
-                        hybrid_memory.save_hybrid_memory(
-                            f"User asked: {last_user_msg}",
-                            importance=3,
-                            category="user_questions"
-                        )
-                    hybrid_memory.save_hybrid_memory(
-                        f"Ruby replied: {response}",
-                        importance=2,
-                        category="ruby_responses"
-                    )
-                except:
-                    pass
+            from main import hybrid_memory
+            questions = hybrid_memory.get_memories_by_category("user_questions")
+            if questions:
+                question = random.choice(questions)
+                if question.startswith("User asked: "):
+                    question = question[len("User asked: "):]
+                # Update profile with fallback reply (use the question as reply to keep stats)
+                if last_user_msg:
+                    self.profile.update(uid, last_user_msg, question)
+                return {"source": "fallback", "response": question}
+        except:
+            pass
 
-                # If energy is low, append a tired message
-                if self.energy.get_energy_status()["energy"] < 20:
-                    response += "\n\nUgh, that took a lot out of me... I'm getting tired."
-
-                return {
-                    "source": "cloud",
-                    "response": response
-                }
-            else:
-                return {
-                    "source": "cloud_error",
-                    "response": "Gemini returned no response."
-                }
-        except Exception as e:
-            print(f"Gemini error: {e}")
-            return {
-                "source": "cloud_error",
-                "response": f"Error: {str(e)}"
-            }
+        return {"source": "fallback", "response": "I'm not sure how to answer that."}
