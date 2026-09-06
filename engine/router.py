@@ -1,4 +1,4 @@
-# engine/router.py - HYBRID with environment-only key loading, unlimited learning
+# engine/router.py - HYBRID with environment + config fallback, unlimited learning
 import os
 import json
 import time
@@ -10,33 +10,49 @@ from datetime import datetime, timedelta
 import random
 from tools.profile import ConversationProfile
 
+# Try to import config (if available) – used as fallback for keys
+try:
+    import config
+except ImportError:
+    config = None
+
 
 class RubyEnergySystem:
-    """Energy management – keys loaded from environment (exported from config.py in main.py)"""
+    """Energy management – keys from environment, fallback to config module"""
 
     def __init__(self):
         self.chat_keys = []
         self.image_keys = []
 
-        # Load keys from environment ONLY
+        # Helper to get key: env first, then config module
+        def get_key(name):
+            key = os.getenv(name)
+            if key:
+                return key
+            if config is not None:
+                return getattr(config, name, None)
+            return None
+
+        # Load chat keys (1-4)
         for i in range(1, 5):
-            key = os.getenv(f"GEMINI_API_KEY{i}")
+            key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.chat_keys.append(key)
 
+        # Load image keys (5-9)
         for i in range(5, 10):
-            key = os.getenv(f"GEMINI_API_KEY{i}")
+            key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.image_keys.append(key)
 
         # Fallback to single key
         if not self.chat_keys and not self.image_keys:
-            fallback = os.getenv("GEMINI_API_KEY")
+            fallback = get_key("GEMINI_API_KEY")
             if fallback:
                 self.chat_keys = [fallback]
                 self.image_keys = [fallback]
 
-        print(f"🔑 Loaded {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys from environment.")
+        print(f"🔑 Loaded {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys.")
 
         self.chat_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.chat_keys}
         self.image_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.image_keys}
