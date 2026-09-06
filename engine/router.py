@@ -1,4 +1,4 @@
-# engine/router.py - HYBRID with Conversation Profile Learning
+# engine/router.py - HYBRID with environment-only key loading, unlimited learning
 import os
 import json
 import time
@@ -8,45 +8,35 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
 import random
-
-# Import the profile tracker
 from tools.profile import ConversationProfile
-
-try:
-    import config
-except ImportError:
-    config = None
 
 
 class RubyEnergySystem:
-    """Energy management with 9 keys – only limit is Gemini quota (20 requests/key/day)"""
+    """Energy management – keys loaded from environment (exported from config.py in main.py)"""
 
     def __init__(self):
         self.chat_keys = []
         self.image_keys = []
 
-        def get_key(name):
-            if config is not None:
-                val = getattr(config, name, None)
-                if val:
-                    return val
-            return os.getenv(name)
-
+        # Load keys from environment ONLY
         for i in range(1, 5):
-            key = get_key(f"GEMINI_API_KEY{i}")
+            key = os.getenv(f"GEMINI_API_KEY{i}")
             if key:
                 self.chat_keys.append(key)
 
         for i in range(5, 10):
-            key = get_key(f"GEMINI_API_KEY{i}")
+            key = os.getenv(f"GEMINI_API_KEY{i}")
             if key:
                 self.image_keys.append(key)
 
+        # Fallback to single key
         if not self.chat_keys and not self.image_keys:
-            fallback = get_key("GEMINI_API_KEY")
+            fallback = os.getenv("GEMINI_API_KEY")
             if fallback:
                 self.chat_keys = [fallback]
                 self.image_keys = [fallback]
+
+        print(f"🔑 Loaded {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys from environment.")
 
         self.chat_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.chat_keys}
         self.image_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.image_keys}
@@ -68,8 +58,6 @@ class RubyEnergySystem:
         self.tired_threshold = 30
         self.sleep_threshold = 10
 
-        print(f"RubyEnergySystem initialized with {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys")
-
     def get_chat_key(self):
         with self.lock:
             if self.is_sleeping:
@@ -86,7 +74,7 @@ class RubyEnergySystem:
 
             for _ in range(len(self.chat_keys)):
                 key = self.chat_keys[self.chat_index]
-                if self.chat_usage[key]["count"] < 20:   # Gemini free tier limit
+                if self.chat_usage[key]["count"] < 20:
                     self.chat_usage[key]["count"] += 1
                     self.chat_index = (self.chat_index + 1) % len(self.chat_keys)
                     print(f"Using chat key {key[:10]}... (count: {self.chat_usage[key]['count']}/20)")
@@ -170,8 +158,7 @@ class RubyEnergySystem:
 
         self._sync_and_reset()
 
-        # --- Memory compression removed: ALL memories are kept forever ---
-        # No call to hybrid_memory.compress_memories()
+        # No memory compression – all memories kept forever
 
         try:
             from main import gmail, cloud, MEMORY_DB, KNOWLEDGE_DB
@@ -298,10 +285,8 @@ class BrainRouter:
             self.cloud_api_key = self.energy.chat_keys[0]
 
         self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
-
-        # Initialize conversation profile tracker
         self.profile = ConversationProfile()
-        self.user_id = user_id   # can be overridden per request
+        self.user_id = user_id
 
     def _call_local_brain(self, messages, context=None):
         try:
@@ -318,7 +303,6 @@ class BrainRouter:
         if not last_user_msg:
             return None
 
-        # Save user message for learning (always)
         if "?" in last_user_msg:
             hybrid_memory.save_hybrid_memory(
                 f"User asked: {last_user_msg}",
@@ -332,15 +316,12 @@ class BrainRouter:
                 category="user_messages"
             )
 
-        # Search for a stored Q&A pair
         memories = hybrid_memory.search_memories(last_user_msg)
         for mem in memories:
             if mem.startswith("Q: ") and "\nA: " in mem:
-                # Extract answer
                 answer = mem.split("\nA: ", 1)[1]
                 return answer
 
-        # No direct match – return None so we call Gemini
         return None
 
     def _call_cloud(self, messages, personality=None):
@@ -378,17 +359,14 @@ class BrainRouter:
             raise
 
     def _get_style_instruction(self, user_id):
-        """Build a style instruction from the user's conversation profile."""
         stats = self.profile.get_stats(user_id)
-        if stats and stats['total_turns'] > 3:   # only adapt after a few exchanges
+        if stats and stats['total_turns'] > 3:
             return self.profile.build_style_instruction(stats)
         return ""
 
     def route_request(self, messages, personality=None, use_cloud_preferred=True, user_id=None):
-        # Use provided user_id or fallback to default
         uid = user_id if user_id else self.user_id
 
-        # Energy check
         if not self.energy.is_available():
             if self.energy.is_sleeping:
                 if self.energy.sleep_until and datetime.now() < self.energy.sleep_until:
@@ -405,10 +383,8 @@ class BrainRouter:
                 last_user_msg = msg.get("content", "")
                 break
 
-        # Try local brain first (Q&A match)
         local_answer = self._call_local_brain(messages)
         if local_answer is not None:
-            # Update profile with this exchange (user msg + local reply)
             if last_user_msg:
                 self.profile.update(uid, last_user_msg, local_answer)
             try:
@@ -422,17 +398,14 @@ class BrainRouter:
                 pass
             return {"source": "local_brain", "response": local_answer}
 
-        # No local match – try Gemini
         if use_cloud_preferred:
             chat_key = self.energy.get_chat_key()
             if chat_key is not None:
                 self.cloud_api_key = chat_key
-                # Inject style instruction into personality
                 style_instr = self._get_style_instruction(uid)
                 if style_instr:
                     if personality is None:
                         personality = ""
-                    # Append style instruction to the system prompt
                     personality += "\n\n" + style_instr
 
                 max_retries = 3
@@ -445,10 +418,8 @@ class BrainRouter:
                         if response:
                             print("========== GEMINI SUCCESS ==========")
                             self.energy.conversations_today += 1
-                            # Update profile
                             if last_user_msg:
                                 self.profile.update(uid, last_user_msg, response)
-                            # Store Q&A for future learning
                             try:
                                 from main import hybrid_memory
                                 if last_user_msg:
@@ -495,7 +466,6 @@ class BrainRouter:
                         print(f"Unexpected error: {e}")
                         break
 
-        # Fallback: ask a previous question (only if Gemini failed)
         try:
             from main import hybrid_memory
             questions = hybrid_memory.get_memories_by_category("user_questions")
@@ -503,7 +473,6 @@ class BrainRouter:
                 question = random.choice(questions)
                 if question.startswith("User asked: "):
                     question = question[len("User asked: "):]
-                # Update profile with fallback reply (use the question as reply to keep stats)
                 if last_user_msg:
                     self.profile.update(uid, last_user_msg, question)
                 return {"source": "fallback", "response": question}
