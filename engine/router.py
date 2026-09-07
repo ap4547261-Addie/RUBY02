@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import random
 from tools.profile import ConversationProfile
 
-# Try to import config (if available) – used as fallback for keys
+# Try to import config – used as fallback for keys
 try:
     import config
 except ImportError:
@@ -24,11 +24,12 @@ class RubyEnergySystem:
         self.chat_keys = []
         self.image_keys = []
 
-        # Helper to get key: env first, then config module
         def get_key(name):
+            # 1. Try environment variable first (for local testing)
             key = os.getenv(name)
             if key:
                 return key
+            # 2. Fallback to config module (for APK build)
             if config is not None:
                 return getattr(config, name, None)
             return None
