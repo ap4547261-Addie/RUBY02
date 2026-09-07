@@ -1,4 +1,4 @@
-# engine/router.py - HYBRID with environment + config fallback, unlimited learning
+# engine/router.py - HYBRID with environment + config fallback
 import os
 import json
 import time
@@ -10,43 +10,34 @@ from datetime import datetime, timedelta
 import random
 from tools.profile import ConversationProfile
 
-# Try to import config – used as fallback for keys
 try:
     import config
 except ImportError:
     config = None
 
-
 class RubyEnergySystem:
-    """Energy management – keys from environment, fallback to config module"""
-
     def __init__(self):
         self.chat_keys = []
         self.image_keys = []
 
         def get_key(name):
-            # 1. Try environment variable first (for local testing)
             key = os.getenv(name)
             if key:
                 return key
-            # 2. Fallback to config module (for APK build)
             if config is not None:
                 return getattr(config, name, None)
             return None
 
-        # Load chat keys (1-4)
         for i in range(1, 5):
             key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.chat_keys.append(key)
 
-        # Load image keys (5-9)
         for i in range(5, 10):
             key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.image_keys.append(key)
 
-        # Fallback to single key
         if not self.chat_keys and not self.image_keys:
             fallback = get_key("GEMINI_API_KEY")
             if fallback:
@@ -57,21 +48,17 @@ class RubyEnergySystem:
 
         self.chat_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.chat_keys}
         self.image_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.image_keys}
-
         self.chat_index = 0
         self.image_index = 0
         self.lock = threading.Lock()
-
         self.is_sleeping = False
         self.sleep_until = None
         self.total_sleeps = 0
         self.current_wake_start = datetime.now()
         self.longest_wake = 0
-
         self.energy = 100
         self.conversations_today = 0
         self.images_today = 0
-
         self.tired_threshold = 30
         self.sleep_threshold = 10
 
@@ -174,9 +161,7 @@ class RubyEnergySystem:
         self.sleep_until = datetime.now() + timedelta(hours=sleep_hours)
 
         self._sync_and_reset()
-
-        # No memory compression – all memories kept forever
-
+        # No memory compression
         try:
             from main import gmail, cloud, MEMORY_DB, KNOWLEDGE_DB
             if gmail:
