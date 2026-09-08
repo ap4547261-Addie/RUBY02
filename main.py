@@ -1,4 +1,4 @@
-# main.py - Cloudflare Workers AI integration (keys from env)
+# main.py - OFFLINE with Pinecone (full version)
 import sys
 import os
 import traceback
@@ -53,25 +53,15 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 
 # ============================================
-# CLOUDFLARE CREDENTIALS FROM ENVIRONMENT
+# PINECONE (read from environment)
 # ============================================
-# Set via GitHub secrets or local environment variables.
-# For local testing, you can hardcode them here (remove before committing).
-cloudflare_api_key = os.getenv("CLOUDFLARE_API_KEY")
-cloudflare_account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
-
-# Fallback for local testing (remove for production)
-if not cloudflare_api_key:
-    cloudflare_api_key = "your-local-token"  # replace for testing
-if not cloudflare_account_id:
-    cloudflare_account_id = "your-local-account-id"
-
-# Print status (will appear in logs)
-print(f"☁️ Cloudflare API Key: {'SET' if cloudflare_api_key else 'NOT SET'}")
-print(f"☁️ Cloudflare Account ID: {'SET' if cloudflare_account_id else 'NOT SET'}")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_INDEX_HOST = os.getenv("PINECONE_INDEX_HOST")
+print(f"🔑 Pinecone API: {'SET' if PINECONE_API_KEY else 'NOT SET'}")
+print(f"🔗 Pinecone Host: {'SET' if PINECONE_INDEX_HOST else 'NOT SET'}")
 
 # ============================================
-# WSGIRef stub (package version)
+# WSGIRef stub
 # ============================================
 try:
     import wsgiref
@@ -138,7 +128,7 @@ KNOWLEDGE_DB = os.path.join(STORAGE_DIR, "ruby_knowledge.db")
 HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 
 # ============================================
-# BACKUP SYSTEM (Gmail + Cloud) – optional
+# BACKUP (Gmail + Cloud) – optional
 # ============================================
 def ensure_credentials():
     creds_content = os.getenv("GMAIL_CREDENTIANLS_JSON")
@@ -234,9 +224,7 @@ def connect_gmail_button(page):
         style=ft.ButtonStyle(color=ft.Colors.GREEN_400),
     )
 
-# ============================================
 # Cloud Storage backup
-# ============================================
 from tools.cloud_backup import CloudBackup
 cloud = None
 cloud_creds_local = "service_account.json"
@@ -274,17 +262,13 @@ def restore_from_backups():
 # ============================================
 # INITIALISE CORE
 # ============================================
-# Pass Cloudflare credentials to the router
-router = BrainRouter(
-    cloud_api_key=cloudflare_api_key,
-    account_id=cloudflare_account_id
-)
-brain_core = RubyBrainCore(api_key=None)  # no Gemini keys needed for text
+router = BrainRouter()
+brain_core = RubyBrainCore(api_key=None)
 
 hybrid_memory = HybridMemorySystem(
     sqlite_path=MEMORY_DB,
-    pinecone_api_key=None,
-    index_host=None
+    pinecone_api_key=PINECONE_API_KEY,
+    index_host=PINECONE_INDEX_HOST
 )
 
 try:
@@ -304,7 +288,6 @@ video_learner = VideoLearner(data_ingestion)
 vision_engine = None
 instagram_connector = InstagramConnector(hybrid_memory)
 
-# ---- CREATE WEBSOCKET HANDLER ----
 websocket_handler = WebSocketHandler(
     hybrid_memory,
     data_ingestion,
@@ -314,7 +297,6 @@ websocket_handler = WebSocketHandler(
 )
 print("🔌 WebSocketHandler initialized")
 
-# ---- Register tools with RubyEngine ----
 tools = {
     "instagram": instagram_connector,
     "web_learner": web_learner,
@@ -331,7 +313,6 @@ ruby_engine = RubyEngine(
 )
 print("🧠 RubyEngine initialized!")
 
-# ---- START WEBSOCKET SERVER ----
 def start_websocket_server():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -573,7 +554,7 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    print("\n🌹 RUBY APP STARTING (Cloudflare Workers AI)")
+    print("\n🌹 RUBY APP STARTING (Offline + Pinecone)")
     try:
         ft.app(target=main_app_ui)
     except Exception as e:
