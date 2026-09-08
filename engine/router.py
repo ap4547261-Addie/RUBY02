@@ -1,4 +1,4 @@
-# engine/router.py - FULL with reduced sleep, Cloudflare Workers AI
+# engine/router.py - FULL (offline, with all energy/backup features)
 import os
 import json
 import time
@@ -8,7 +8,6 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
 import random
-import requests
 from tools.profile import ConversationProfile
 
 try:
@@ -18,15 +17,11 @@ except ImportError:
 
 
 class RubyEnergySystem:
-    """Full original energy system with reduced sleep duration"""
+    """Full original energy system with reduced sleep (2h max)"""
 
     def __init__(self):
         self.chat_keys = []
         self.image_keys = []
-
-        # Cloudflare credentials (for text generation)
-        self.cloudflare_api_key = os.getenv("CLOUDFLARE_API_KEY")
-        self.cloudflare_account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
 
         # Load Gemini keys (for Imagen/fallback – optional)
         def get_key(name):
@@ -52,8 +47,6 @@ class RubyEnergySystem:
                 self.image_keys = [fallback]
 
         print(f"🔑 Loaded {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys (for Imagen/fallback).")
-        print(f"☁️ Cloudflare API key: {'SET' if self.cloudflare_api_key else 'NOT SET'}")
-        print(f"☁️ Cloudflare Account ID: {'SET' if self.cloudflare_account_id else 'NOT SET'}")
 
         self.chat_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.chat_keys}
         self.image_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.image_keys}
@@ -145,18 +138,17 @@ class RubyEnergySystem:
             return
         ratio = total_used / total_limit if total_limit > 0 else 0
 
-        # ---- REDUCED SLEEP DURATION (max 2 hours) ----
+        # ---- REDUCED SLEEP (max 2 hours) ----
         if ratio >= 0.9:
-            sleep_hours = 2      # was 8
+            sleep_hours = 2
         elif ratio >= 0.6:
-            sleep_hours = 1.5    # was 6
+            sleep_hours = 1.5
         elif ratio >= 0.4:
-            sleep_hours = 1      # was 4
+            sleep_hours = 1
         elif ratio >= 0.1:
-            sleep_hours = 0.5    # was 2
+            sleep_hours = 0.5
         else:
             sleep_hours = 0
-        # ----------------------------------------------
 
         if sleep_hours == 0:
             print("💪 Ruby doesn't need sleep right now!")
@@ -279,17 +271,9 @@ class RubyEnergySystem:
 
 
 class BrainRouter:
-    def __init__(self, cloud_api_key=None, account_id=None, local_model_path=None, user_id="default_user"):
+    def __init__(self, cloud_api_key=None, local_model_path=None, user_id="default_user"):
         self.energy = RubyEnergySystem()
         self.local_model_path = local_model_path
-
-        # Cloudflare credentials
-        self.cloudflare_api_key = cloud_api_key or os.getenv("CLOUDFLARE_API_KEY")
-        self.cloudflare_account_id = account_id or os.getenv("CLOUDFLARE_ACCOUNT_ID")
-
-        # Dummy for compatibility
-        self.cloud_api_key = "dummy"
-
         self.profile = ConversationProfile()
         self.user_id = user_id
 
@@ -329,45 +313,9 @@ class BrainRouter:
 
         return None
 
-    def _call_cloud(self, messages, personality=None):
-        """Call Cloudflare Workers AI (Llama 3.1 8B)"""
-        if not self.cloudflare_api_key or not self.cloudflare_account_id:
-            print("⚠️ Cloudflare credentials missing.")
-            return None
-
-        # Build prompt
-        prompt = ""
-        for msg in messages:
-            role = "user" if msg.get("role") == "user" else "assistant"
-            content = msg.get("content", "")
-            if role == "user":
-                prompt += f"User: {content}\n"
-            else:
-                prompt += f"Assistant: {content}\n"
-        prompt += "Assistant:"
-
-        url = f"https://api.cloudflare.com/client/v4/accounts/{self.cloudflare_account_id}/ai/run/@cf/meta/llama-3.1-8b-instruct"
-        headers = {
-            "Authorization": f"Bearer {self.cloudflare_api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "prompt": prompt,
-            "max_tokens": 500,
-            "temperature": 0.9
-        }
-
-        try:
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("result", {}).get("response", "No response")
-            else:
-                print(f"Cloudflare error: {response.status_code} - {response.text}")
-                return None
-        except Exception as e:
-            print(f"Cloudflare AI error: {e}")
-            return None
+    # ---- Cloud call is disabled (fully offline) ----
+    # def _call_cloud(self, messages, personality=None):
+    #     return None
 
     def _get_style_instruction(self, user_id):
         stats = self.profile.get_stats(user_id)
@@ -375,7 +323,7 @@ class BrainRouter:
             return self.profile.build_style_instruction(stats)
         return ""
 
-    def route_request(self, messages, personality=None, use_cloud_preferred=True, user_id=None):
+    def route_request(self, messages, personality=None, use_cloud_preferred=False, user_id=None):
         uid = user_id if user_id else self.user_id
 
         if not self.energy.is_available():
@@ -394,7 +342,7 @@ class BrainRouter:
                 last_user_msg = msg.get("content", "")
                 break
 
-        # Try local brain first
+        # 1. Try local brain
         local_answer = self._call_local_brain(messages)
         if local_answer is not None:
             if last_user_msg:
@@ -410,41 +358,10 @@ class BrainRouter:
                 pass
             return {"source": "local_brain", "response": local_answer}
 
-        # If no local match, try Cloudflare
-        if use_cloud_preferred:
-            cloud_response = self._call_cloud(messages, personality)
-            if cloud_response:
-                self.energy.conversations_today += 1
-                if last_user_msg:
-                    self.profile.update(uid, last_user_msg, cloud_response)
-                try:
-                    from main import hybrid_memory
-                    if last_user_msg:
-                        hybrid_memory.save_hybrid_memory(
-                            f"Q: {last_user_msg}\nA: {cloud_response}",
-                            importance=3,
-                            category="qa_pair"
-                        )
-                        hybrid_memory.save_hybrid_memory(
-                            f"User asked: {last_user_msg}",
-                            importance=3,
-                            category="user_questions"
-                        )
-                    hybrid_memory.save_hybrid_memory(
-                        f"Ruby replied: {cloud_response}",
-                        importance=2,
-                        category="ruby_responses"
-                    )
-                except:
-                    pass
-                if self.energy.get_energy_status()["energy"] < 20:
-                    cloud_response += "\n\nUgh, that took a lot out of me... I'm getting tired."
-                return {"source": "cloud", "response": cloud_response}
-            else:
-                # Cloud failed – fallback to local brain (already tried)
-                pass
+        # 2. Cloud call disabled – no external API
+        # (If you want to re‑enable, uncomment the _call_cloud block and set use_cloud_preferred=True)
 
-        # Ultimate fallback: ask a previous question
+        # 3. Fallback: ask a previous question
         try:
             from main import hybrid_memory
             questions = hybrid_memory.get_memories_by_category("user_questions")
