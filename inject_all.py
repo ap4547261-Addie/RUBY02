@@ -1,4 +1,4 @@
-# inject_all.py
+# inject_all.py – with block list to filter out creation‑related and personal content
 import os
 import json
 import sqlite3
@@ -16,10 +16,52 @@ model = genai.GenerativeModel("gemini-2.0-flash-exp")
 DB_PATH = "ruby_memory.db"
 DATA_FOLDER = "training_data"
 
+# ============================================
+# BLOCK LIST – add any phrases to skip
+# ============================================
+BLOCKED_PHRASES = [
+    # Personal info
+    "my name is",
+    "my email",
+    "my phone",
+    "my address",
+    "my birthday",
+
+    # Ruby's creation / development
+    "I am creating Ruby",
+    "I am building Ruby",
+    "building an AI",
+    "creating an AI",
+    "Ruby is an AI",
+    "Ruby's code",
+    "programming Ruby",
+    "developer of Ruby",
+    "I am a developer",
+    "I am working on Ruby",
+    "Ruby's personality",
+    "training Ruby",
+    "local brain",
+    "gemini key",
+    "api key",
+
+    # Any specific names you want to block
+    # "YourName",
+    # "FriendName",
+]
+
+def is_blocked(text):
+    """Return True if text contains any blocked phrase (case‑insensitive)."""
+    text_lower = text.lower()
+    for phrase in BLOCKED_PHRASES:
+        if phrase.lower() in text_lower:
+            return True
+    return False
+
 def parse_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
+    # Instagram format
     if "messages" in data and isinstance(data["messages"], list):
         convo = ""
         for msg in data["messages"]:
@@ -29,6 +71,7 @@ def parse_file(file_path):
                 convo += f"{sender}: {content}\n"
         return convo
 
+    # ChatGPT format
     if "conversations" in data and isinstance(data["conversations"], list):
         convo = ""
         for conv in data["conversations"]:
@@ -40,6 +83,7 @@ def parse_file(file_path):
                     convo += f"{role}: {content}\n"
         return convo
 
+    # Generic fallback
     for key in ["messages", "conversation", "chat", "items"]:
         if key in data and isinstance(data[key], list):
             convo = ""
@@ -86,6 +130,10 @@ def inject_qa_pairs(qa_text):
         elif line.startswith("A: ") and q:
             a = line[3:].strip()
             full = f"Q: {q}\nA: {a}"
+            # Skip if blocked
+            if is_blocked(full):
+                q = None
+                continue
             c.execute('''
                 INSERT INTO memories (text, category, importance, timestamp)
                 VALUES (?, ?, ?, ?)
