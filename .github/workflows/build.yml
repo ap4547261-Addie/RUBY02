@@ -45,6 +45,15 @@ jobs:
 
     - name: Build APK
       env:
+        GEMINI_API_KEY1: ${{ secrets.GEMINI_API_KEY1 }}
+        GEMINI_API_KEY2: ${{ secrets.GEMINI_API_KEY2 }}
+        GEMINI_API_KEY3: ${{ secrets.GEMINI_API_KEY3 }}
+        GEMINI_API_KEY4: ${{ secrets.GEMINI_API_KEY4 }}
+        GEMINI_API_KEY5: ${{ secrets.GEMINI_API_KEY5 }}
+        GEMINI_API_KEY6: ${{ secrets.GEMINI_API_KEY6 }}
+        GEMINI_API_KEY7: ${{ secrets.GEMINI_API_KEY7 }}
+        GEMINI_API_KEY8: ${{ secrets.GEMINI_API_KEY8 }}
+        GEMINI_API_KEY9: ${{ secrets.GEMINI_API_KEY9 }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
         PINECONE_INDEX_HOST: ${{ secrets.PINECONE_INDEX_HOST }}
@@ -52,21 +61,31 @@ jobs:
         GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
         FLET_SUPPRESS_PROMPTS: "true"
       run: |
-        # ---- Generate config.py with only GEMINI_API_KEY ----
+        # ---- Generate config.py with all keys (using GitHub expressions) ----
         cat > config.py << EOF
-        GEMINI_API_KEY = "${{ secrets.GEMINI_API_KEY }}"
+        GEMINI_API_KEY1 = "${{ secrets.GEMINI_API_KEY1 }}"
+        GEMINI_API_KEY2 = "${{ secrets.GEMINI_API_KEY2 }}"
+        GEMINI_API_KEY3 = "${{ secrets.GEMINI_API_KEY3 }}"
+        GEMINI_API_KEY4 = "${{ secrets.GEMINI_API_KEY4 }}"
+        GEMINI_API_KEY5 = "${{ secrets.GEMINI_API_KEY5 }}"
+        GEMINI_API_KEY6 = "${{ secrets.GEMINI_API_KEY6 }}"
+        GEMINI_API_KEY7 = "${{ secrets.GEMINI_API_KEY7 }}"
+        GEMINI_API_KEY8 = "${{ secrets.GEMINI_API_KEY8 }}"
+        GEMINI_API_KEY9 = "${{ secrets.GEMINI_API_KEY9 }}"
+        GEMINI_API_KEY   = "${{ secrets.GEMINI_API_KEY }}"
         PINECONE_API_KEY = "${{ secrets.PINECONE_API_KEY }}"
         PINECONE_INDEX_HOST = "${{ secrets.PINECONE_INDEX_HOST }}"
         EOF
 
-        # ---- Debug: show first 10 chars ----
+        # ---- Debug: print first 10 chars of each key ----
         echo "=== config.py keys debug ==="
-        grep -E "GEMINI_API_KEY =" config.py | while read line; do
+        grep -E "GEMINI_API_KEY[0-9]* =" config.py | while read line; do
           val=$(echo "$line" | sed 's/^.*= "//' | sed 's/".*$//')
-          echo "GEMINI_API_KEY -> ${val:0:10}..."
+          echo "${line%%=*} -> ${val:0:10}..."
         done
         echo "=============================="
 
+        # ---- Write Gmail/Cloud credentials (if provided) ----
         if [ -n "$GMAIL_CREDENTIANLS_JSON" ]; then
           echo "$GMAIL_CREDENTIANLS_JSON" > credentials.json
           echo "✅ Gmail credentials written."
@@ -76,6 +95,7 @@ jobs:
           echo "✅ Cloud Storage service account written."
         fi
 
+        # ---- Clean and build ----
         rm -rf build/ dist/ __pycache__/
         flet build apk --python-version 3.14 --arch arm64-v8a --yes --verbose
 
