@@ -1,4 +1,4 @@
-# main.py - FINAL (fixed order, websocket_handler defined before tools)
+# main.py - FINAL with hardcoded key for testing
 import sys
 import os
 import traceback
@@ -51,6 +51,13 @@ from tools.instagram_connector import InstagramConnector
 from tools.websocket_handler import WebSocketHandler
 from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
+
+# ============================================
+# TEMPORARY HARDCODE – remove after testing
+# ============================================
+# Replace "YOUR_ACTUAL_KEY" with the key that works in Termux
+os.environ["GEMINI_API_KEY"] = "AQ.Ab8RN6K4tQSW9wMk3P3SO29lSGuZg8CvZy_Km7mj5xea60i6mQ"
+print("🔑 Hardcoded GEMINI_API_KEY set")
 
 # ============================================
 # LOAD KEYS: from config.py if exists, else from environment
@@ -577,7 +584,7 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    print("\n🌹 RUBY APP STARTING")
+    print("\n🌹 RUBY APP STARTING (hardcoded key test)")
     try:
         ft.app(target=main_app_ui)
     except Exception as e:
