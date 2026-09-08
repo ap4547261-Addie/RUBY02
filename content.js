@@ -307,6 +307,7 @@
                     content += data.text || '';
             }
             
+            // Send to background.js
             if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
                 chrome.runtime.sendMessage({
                     action: "streamSocialContent",
@@ -315,7 +316,7 @@
                     content: content.slice(0, 5000)
                 }, (response) => {
                     if (chrome.runtime.lastError) {
-                        console.log('Background not ready:', chrome.runtime.lastError);
+                        console.log('📨 Queued for Ruby:', data.platform);
                     }
                 });
             }
@@ -327,10 +328,12 @@
         }
     }
 
+    // Extract on page load
     window.addEventListener("load", () => {
         setTimeout(extractPageData, 2000);
     });
 
+    // Extract on URL change
     let lastUrl = window.location.href;
     const observer = new MutationObserver(() => {
         if (window.location.href !== lastUrl) {
@@ -340,6 +343,7 @@
     });
     observer.observe(document, { subtree: true, childList: true });
 
+    // Extract on scroll (for infinite scroll pages like Instagram, TikTok)
     let scrollTimeout;
     window.addEventListener('scroll', () => {
         clearTimeout(scrollTimeout);
