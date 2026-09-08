@@ -1,4 +1,4 @@
-# engine/router.py - HYBRID with environment + config fallback
+# engine/router.py - HARDCODED KEY TEST (remove after verification)
 import os
 import json
 import time
@@ -282,9 +282,17 @@ class BrainRouter:
     def __init__(self, cloud_api_key=None, local_model_path=None, user_id="default_user"):
         self.energy = RubyEnergySystem()
         self.local_model_path = local_model_path
-        self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
-        if not self.cloud_api_key and self.energy.chat_keys:
-            self.cloud_api_key = self.energy.chat_keys[0]
+
+        # ======================================================
+        # HARDCODED KEY – replace YOUR_ACTUAL_KEY with your key
+        # ======================================================
+        self.cloud_api_key = "AQ.Ab8RN6K4tQSW9wMk3P3SO29lSGuZg8CvZy_Km7mj5xea60i6mQ"   # <--- PASTE YOUR KEY HERE
+
+        # If you want to fall back to config/env, comment the line above
+        # and uncomment the lines below:
+        # self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
+        # if not self.cloud_api_key and self.energy.chat_keys:
+        #     self.cloud_api_key = self.energy.chat_keys[0]
 
         self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
         self.profile = ConversationProfile()
@@ -403,7 +411,13 @@ class BrainRouter:
         if use_cloud_preferred:
             chat_key = self.energy.get_chat_key()
             if chat_key is not None:
-                self.cloud_api_key = chat_key
+                # Use the hardcoded key if available, otherwise fallback to chat_key
+                if self.cloud_api_key:
+                    # Already set; no need to override
+                    pass
+                else:
+                    self.cloud_api_key = chat_key
+
                 style_instr = self._get_style_instruction(uid)
                 if style_instr:
                     if personality is None:
