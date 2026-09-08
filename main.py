@@ -1,4 +1,4 @@
-# main.py - handles both string and dict responses from engine
+# main.py - FINAL (handles config.py if exists, else environment)
 import sys
 import os
 import traceback
@@ -39,7 +39,6 @@ sys.excepthook = log_crash
 # ============================================
 # IMPORTS
 # ============================================
-# No config.py – we use environment variables
 from engine.router import BrainRouter
 from engine.brain import RubyBrainCore
 from engine.vector_store import HybridMemorySystem
@@ -54,13 +53,33 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 
 # ============================================
-# DEBUG: print environment keys
+# LOAD KEYS: from config.py if exists, else from environment
 # ============================================
-print("=== GEMINI KEYS ENVIRONMENT ===")
+try:
+    import config
+    print("✅ config.py imported (APK build)")
+    key_names = ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY{i}" for i in range(1, 10)]
+    for name in key_names:
+        val = getattr(config, name, None)
+        if val:
+            os.environ[name] = val
+            print(f"🔑 Exported {name} from config")
+        else:
+            print(f"❌ {name} not set in config")
+except ImportError:
+    print("ℹ️ config.py not found – using environment variables (local testing)")
+    # If running locally, ensure keys are set in environment (or hardcode for testing)
+    # if not os.getenv("GEMINI_API_KEY"):
+    #     os.environ["GEMINI_API_KEY"] = "your-key-here"
+
+# ============================================
+# DEBUG: print current environment keys
+# ============================================
+print("=== GEMINI KEYS DEBUG ===")
 for name in ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY{i}" for i in range(1, 10)]:
     val = os.getenv(name)
     print(f"{name}: {val[:10] if val else 'NOT SET'}")
-print("================================")
+print("=========================")
 
 # ============================================
 # WSGIRef stub (package version)
@@ -291,10 +310,18 @@ video_learner = VideoLearner(data_ingestion)
 
 vision_engine = None
 instagram_connector = InstagramConnector(hybrid_memory)
+
+# ---- Register tools with RubyEngine ----
+tools = {
+    "instagram": instagram_connector,
+    "web_learner": web_learner,
+    "video_learner": video_learner,
+    "websocket": websocket_handler,
+}
 ruby_engine = RubyEngine(
     memory=hybrid_memory,
     knowledge=data_ingestion,
-    tools=None,
+    tools=tools,
     router=router,
     brain_core=brain_core,
     personality=RUBY_PROMPT
@@ -511,7 +538,6 @@ def main_app_ui(page: ft.Page):
             page.update()
             return
 
-        # Handle if result is a string or dict
         if isinstance(result, str):
             response = result
             source = "unknown"
@@ -550,7 +576,7 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    print("\n🌹 RUBY APP STARTING (environment variables only)")
+    print("\n🌹 RUBY APP STARTING")
     try:
         ft.app(target=main_app_ui)
     except Exception as e:
