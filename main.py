@@ -1,4 +1,4 @@
-# main.py - FINAL with hardcoded key for testing
+# main.py - Cloudflare Workers AI integration (keys from env)
 import sys
 import os
 import traceback
@@ -53,37 +53,22 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 
 # ============================================
-# TEMPORARY HARDCODE – remove after testing
+# CLOUDFLARE CREDENTIALS FROM ENVIRONMENT
 # ============================================
-# Replace "YOUR_ACTUAL_KEY" with the key that works in Termux
-os.environ["GEMINI_API_KEY"] = "AQ.Ab8RN6K4tQSW9wMk3P3SO29lSGuZg8CvZy_Km7mj5xea60i6mQ"
-print("🔑 Hardcoded GEMINI_API_KEY set")
+# Set via GitHub secrets or local environment variables.
+# For local testing, you can hardcode them here (remove before committing).
+cloudflare_api_key = os.getenv("CLOUDFLARE_API_KEY")
+cloudflare_account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
 
-# ============================================
-# LOAD KEYS: from config.py if exists, else from environment
-# ============================================
-try:
-    import config
-    print("✅ config.py imported (APK build)")
-    key_names = ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY{i}" for i in range(1, 10)]
-    for name in key_names:
-        val = getattr(config, name, None)
-        if val:
-            os.environ[name] = val
-            print(f"🔑 Exported {name} from config")
-        else:
-            print(f"❌ {name} not set in config")
-except ImportError:
-    print("ℹ️ config.py not found – using environment variables (local testing)")
+# Fallback for local testing (remove for production)
+if not cloudflare_api_key:
+    cloudflare_api_key = "your-local-token"  # replace for testing
+if not cloudflare_account_id:
+    cloudflare_account_id = "your-local-account-id"
 
-# ============================================
-# DEBUG: print current environment keys
-# ============================================
-print("=== GEMINI KEYS DEBUG ===")
-for name in ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY{i}" for i in range(1, 10)]:
-    val = os.getenv(name)
-    print(f"{name}: {val[:10] if val else 'NOT SET'}")
-print("=========================")
+# Print status (will appear in logs)
+print(f"☁️ Cloudflare API Key: {'SET' if cloudflare_api_key else 'NOT SET'}")
+print(f"☁️ Cloudflare Account ID: {'SET' if cloudflare_account_id else 'NOT SET'}")
 
 # ============================================
 # WSGIRef stub (package version)
@@ -153,7 +138,7 @@ KNOWLEDGE_DB = os.path.join(STORAGE_DIR, "ruby_knowledge.db")
 HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 
 # ============================================
-# BACKUP SYSTEM (Gmail + Cloud)
+# BACKUP SYSTEM (Gmail + Cloud) – optional
 # ============================================
 def ensure_credentials():
     creds_content = os.getenv("GMAIL_CREDENTIANLS_JSON")
@@ -289,8 +274,12 @@ def restore_from_backups():
 # ============================================
 # INITIALISE CORE
 # ============================================
-router = BrainRouter(cloud_api_key=os.getenv("GEMINI_API_KEY"))
-brain_core = RubyBrainCore(api_key=os.getenv("GEMINI_API_KEY"))
+# Pass Cloudflare credentials to the router
+router = BrainRouter(
+    cloud_api_key=cloudflare_api_key,
+    account_id=cloudflare_account_id
+)
+brain_core = RubyBrainCore(api_key=None)  # no Gemini keys needed for text
 
 hybrid_memory = HybridMemorySystem(
     sqlite_path=MEMORY_DB,
@@ -315,7 +304,7 @@ video_learner = VideoLearner(data_ingestion)
 vision_engine = None
 instagram_connector = InstagramConnector(hybrid_memory)
 
-# ---- CREATE WEBSOCKET HANDLER (BEFORE ENGINE) ----
+# ---- CREATE WEBSOCKET HANDLER ----
 websocket_handler = WebSocketHandler(
     hybrid_memory,
     data_ingestion,
@@ -562,7 +551,7 @@ def main_app_ui(page: ft.Page):
             page.snack_bar = ft.SnackBar(ft.Text(f"❌ {response[:200]}"))
             page.snack_bar.open = True
         elif source == "fallback":
-            page.snack_bar = ft.SnackBar(ft.Text("⚠️ Using local brain (Gemini failed silently)"))
+            page.snack_bar = ft.SnackBar(ft.Text("⚠️ Using local brain (cloud failed silently)"))
             page.snack_bar.open = True
 
         page.update()
@@ -584,7 +573,7 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    print("\n🌹 RUBY APP STARTING (hardcoded key test)")
+    print("\n🌹 RUBY APP STARTING (Cloudflare Workers AI)")
     try:
         ft.app(target=main_app_ui)
     except Exception as e:
