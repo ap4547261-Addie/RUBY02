@@ -61,29 +61,20 @@ jobs:
         GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
         FLET_SUPPRESS_PROMPTS: "true"
       run: |
-        cat > config.py << EOF
-        GEMINI_API_KEY1 = "$GEMINI_API_KEY1"
-        GEMINI_API_KEY2 = "$GEMINI_API_KEY2"
-        GEMINI_API_KEY3 = "$GEMINI_API_KEY3"
-        GEMINI_API_KEY4 = "$GEMINI_API_KEY4"
-        GEMINI_API_KEY5 = "$GEMINI_API_KEY5"
-        GEMINI_API_KEY6 = "$GEMINI_API_KEY6"
-        GEMINI_API_KEY7 = "$GEMINI_API_KEY7"
-        GEMINI_API_KEY8 = "$GEMINI_API_KEY8"
-        GEMINI_API_KEY9 = "$GEMINI_API_KEY9"
-        GEMINI_API_KEY   = "$GEMINI_API_KEY"
-        PINECONE_API_KEY = "$PINECONE_API_KEY"
-        PINECONE_INDEX_HOST = "$PINECONE_INDEX_HOST"
-        EOF
-
+        # Write Gmail credentials if provided
         if [ -n "$GMAIL_CREDENTIANLS_JSON" ]; then
           echo "$GMAIL_CREDENTIANLS_JSON" > credentials.json
+          echo "✅ Gmail credentials written."
         fi
+        # Write Cloud Storage service account if provided
         if [ -n "$GCLOUD_SERVICE_ACCOUNT_JSON" ]; then
           echo "$GCLOUD_SERVICE_ACCOUNT_JSON" > service_account.json
+          echo "✅ Cloud Storage service account written."
         fi
 
         rm -rf build/ dist/ __pycache__/
+
+        # Build APK – keys are passed as environment variables
         flet build apk --python-version 3.14 --arch arm64-v8a --yes --verbose
 
     - name: Upload APK Artifact
