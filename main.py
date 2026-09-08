@@ -1,4 +1,4 @@
-# main.py - OFFLINE with Pinecone (full version)
+# main.py - OFFLINE with Pinecone, Knowledge Gatherer, and full UI
 import sys
 import os
 import traceback
@@ -51,6 +51,11 @@ from tools.instagram_connector import InstagramConnector
 from tools.websocket_handler import WebSocketHandler
 from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
+
+# ============================================
+# KNOWLEDGE GATHERER (background learning)
+# ============================================
+from tools.knowledge_gatherer import KnowledgeGatherer
 
 # ============================================
 # PINECONE (read from environment)
@@ -313,6 +318,21 @@ ruby_engine = RubyEngine(
 )
 print("🧠 RubyEngine initialized!")
 
+# ============================================
+# START KNOWLEDGE GATHERER (background learning)
+# ============================================
+gatherer = KnowledgeGatherer(
+    video_learner=video_learner,
+    web_learner=web_learner,
+    memory=hybrid_memory,
+    knowledge=data_ingestion,
+    interval=600   # learn every 10 minutes – adjust as you wish
+)
+gatherer.start()
+
+# ============================================
+# WEBSOCKET SERVER (background)
+# ============================================
 def start_websocket_server():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -554,7 +574,7 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    print("\n🌹 RUBY APP STARTING (Offline + Pinecone)")
+    print("\n🌹 RUBY APP STARTING (Offline + Pinecone + Gatherer)")
     try:
         ft.app(target=main_app_ui)
     except Exception as e:
