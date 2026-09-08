@@ -1,4 +1,4 @@
-# engine/router.py - no config.py, only environment variables
+# engine/router.py - FULL with reduced sleep, Cloudflare Workers AI
 import os
 import json
 import time
@@ -8,52 +8,69 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
 import random
+import requests
 from tools.profile import ConversationProfile
+
+try:
+    import config
+except ImportError:
+    config = None
 
 
 class RubyEnergySystem:
+    """Full original energy system with reduced sleep duration"""
+
     def __init__(self):
         self.chat_keys = []
         self.image_keys = []
 
+        # Cloudflare credentials (for text generation)
+        self.cloudflare_api_key = os.getenv("CLOUDFLARE_API_KEY")
+        self.cloudflare_account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+
+        # Load Gemini keys (for Imagen/fallback – optional)
         def get_key(name):
-            return os.getenv(name)
+            key = os.getenv(name)
+            if key:
+                return key
+            if config is not None:
+                return getattr(config, name, None)
+            return None
 
         for i in range(1, 5):
             key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.chat_keys.append(key)
-
         for i in range(5, 10):
             key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.image_keys.append(key)
-
         if not self.chat_keys and not self.image_keys:
             fallback = get_key("GEMINI_API_KEY")
             if fallback:
                 self.chat_keys = [fallback]
                 self.image_keys = [fallback]
 
-        print(f"🔑 Loaded {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys.")
-        if self.chat_keys:
-            print(f"   First chat key starts with: {self.chat_keys[0][:10]}...")
-        else:
-            print("   ❌ No chat keys found – check environment variables.")
+        print(f"🔑 Loaded {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys (for Imagen/fallback).")
+        print(f"☁️ Cloudflare API key: {'SET' if self.cloudflare_api_key else 'NOT SET'}")
+        print(f"☁️ Cloudflare Account ID: {'SET' if self.cloudflare_account_id else 'NOT SET'}")
 
         self.chat_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.chat_keys}
         self.image_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.image_keys}
         self.chat_index = 0
         self.image_index = 0
         self.lock = threading.Lock()
+
         self.is_sleeping = False
         self.sleep_until = None
         self.total_sleeps = 0
         self.current_wake_start = datetime.now()
         self.longest_wake = 0
+
         self.energy = 100
         self.conversations_today = 0
         self.images_today = 0
+
         self.tired_threshold = 30
         self.sleep_threshold = 10
 
@@ -64,13 +81,11 @@ class RubyEnergySystem:
                     return None
                 else:
                     self._wake_up()
-
             today = datetime.now().date()
             for key in self.chat_usage:
                 if self.chat_usage[key]["day"] != today:
                     self.chat_usage[key]["count"] = 0
                     self.chat_usage[key]["day"] = today
-
             for _ in range(len(self.chat_keys)):
                 key = self.chat_keys[self.chat_index]
                 if self.chat_usage[key]["count"] < 20:
@@ -79,7 +94,6 @@ class RubyEnergySystem:
                     print(f"Using chat key {key[:10]}... (count: {self.chat_usage[key]['count']}/20)")
                     return key
                 self.chat_index = (self.chat_index + 1) % len(self.chat_keys)
-
             self._go_to_sleep()
             return None
 
@@ -90,13 +104,11 @@ class RubyEnergySystem:
                     return None
                 else:
                     self._wake_up()
-
             today = datetime.now().date()
             for key in self.image_usage:
                 if self.image_usage[key]["day"] != today:
                     self.image_usage[key]["count"] = 0
                     self.image_usage[key]["day"] = today
-
             for _ in range(len(self.image_keys)):
                 key = self.image_keys[self.image_index]
                 if self.image_usage[key]["count"] < 20:
@@ -105,7 +117,6 @@ class RubyEnergySystem:
                     print(f"Using image key {key[:10]}... (count: {self.image_usage[key]['count']}/20)")
                     return key
                 self.image_index = (self.image_index + 1) % len(self.image_keys)
-
             self._go_to_sleep()
             return None
 
@@ -125,38 +136,42 @@ class RubyEnergySystem:
     def _go_to_sleep(self):
         if self.is_sleeping:
             return
-
         chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
         image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
         total_used = chat_used + image_used
         total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
-
         if total_used == 0:
             print("💪 Ruby has full energy! No sleep needed!")
             return
-
         ratio = total_used / total_limit if total_limit > 0 else 0
+
+        # ---- REDUCED SLEEP DURATION (max 2 hours) ----
         if ratio >= 0.9:
-            sleep_hours = 8
+            sleep_hours = 2      # was 8
         elif ratio >= 0.6:
-            sleep_hours = 6
+            sleep_hours = 1.5    # was 6
         elif ratio >= 0.4:
-            sleep_hours = 4
+            sleep_hours = 1      # was 4
         elif ratio >= 0.1:
-            sleep_hours = 2
+            sleep_hours = 0.5    # was 2
         else:
             sleep_hours = 0
+        # ----------------------------------------------
 
         if sleep_hours == 0:
             print("💪 Ruby doesn't need sleep right now!")
             return
-
         self.is_sleeping = True
         self.total_sleeps += 1
         self.sleep_until = datetime.now() + timedelta(hours=sleep_hours)
-
         self._sync_and_reset()
-        # No memory compression
+        # Compress old memories
+        try:
+            from main import hybrid_memory
+            hybrid_memory.compress_memories(days_threshold=30)
+        except Exception as e:
+            print(f"⚠️ Memory compression failed: {e}")
+        # Backup to Gmail and Cloud
         try:
             from main import gmail, cloud, MEMORY_DB, KNOWLEDGE_DB
             if gmail:
@@ -168,11 +183,9 @@ class RubyEnergySystem:
             print("✅ Backups completed.")
         except Exception as e:
             print(f"⚠️ Backup on sleep failed: {e}")
-
         awake_duration = (datetime.now() - self.current_wake_start).seconds / 3600
         if awake_duration > self.longest_wake:
             self.longest_wake = awake_duration
-
         print(f"😴 Ruby is going to sleep for {sleep_hours} hours")
         print(f"🕐 Will wake at {self.sleep_until.strftime('%I:%M %p')}")
         print(f"📊 Keys exhausted: {total_used}/{total_limit}")
@@ -182,7 +195,6 @@ class RubyEnergySystem:
         self.sleep_until = None
         self.current_wake_start = datetime.now()
         self.energy = 100
-
         today = datetime.now().date()
         for key in self.chat_usage:
             self.chat_usage[key]["count"] = 0
@@ -190,7 +202,6 @@ class RubyEnergySystem:
         for key in self.image_usage:
             self.image_usage[key]["count"] = 0
             self.image_usage[key]["day"] = today
-
         print("✨ Ruby woke up refreshed!")
 
     def get_energy_status(self):
@@ -212,13 +223,11 @@ class RubyEnergySystem:
                 "message": "Sleeping...",
                 "energy": self.energy
             }
-
         chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
         image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
         total_used = chat_used + image_used
         total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
         energy_percent = max(0, 100 - (total_used / total_limit * 100))
-
         if energy_percent > 70:
             status = "energetic"
             emoji = "✨"
@@ -235,7 +244,6 @@ class RubyEnergySystem:
             status = "very_tired"
             emoji = "🫠"
             message = "Very tired... need rest soon"
-
         return {
             "status": status,
             "emoji": emoji,
@@ -254,16 +262,13 @@ class RubyEnergySystem:
                 self._wake_up()
                 return True
             return False
-
         chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
         image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
         total_used = chat_used + image_used
         total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
-
         if total_used >= total_limit:
             self._go_to_sleep()
             return False
-
         return True
 
     def get_sleep_message(self):
@@ -274,16 +279,17 @@ class RubyEnergySystem:
 
 
 class BrainRouter:
-    def __init__(self, cloud_api_key=None, local_model_path=None, user_id="default_user"):
+    def __init__(self, cloud_api_key=None, account_id=None, local_model_path=None, user_id="default_user"):
         self.energy = RubyEnergySystem()
         self.local_model_path = local_model_path
 
-        # Load key from environment (no config.py)
-        self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
-        if not self.cloud_api_key and self.energy.chat_keys:
-            self.cloud_api_key = self.energy.chat_keys[0]
+        # Cloudflare credentials
+        self.cloudflare_api_key = cloud_api_key or os.getenv("CLOUDFLARE_API_KEY")
+        self.cloudflare_account_id = account_id or os.getenv("CLOUDFLARE_ACCOUNT_ID")
 
-        self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
+        # Dummy for compatibility
+        self.cloud_api_key = "dummy"
+
         self.profile = ConversationProfile()
         self.user_id = user_id
 
@@ -324,38 +330,44 @@ class BrainRouter:
         return None
 
     def _call_cloud(self, messages, personality=None):
-        if not self.cloud_api_key:
+        """Call Cloudflare Workers AI (Llama 3.1 8B)"""
+        if not self.cloudflare_api_key or not self.cloudflare_account_id:
+            print("⚠️ Cloudflare credentials missing.")
             return None
 
-        contents = []
+        # Build prompt
+        prompt = ""
         for msg in messages:
-            role = "user" if msg.get("role") == "user" else "model"
-            contents.append({"role": role, "parts": [{"text": msg.get("content", "")}]})
+            role = "user" if msg.get("role") == "user" else "assistant"
+            content = msg.get("content", "")
+            if role == "user":
+                prompt += f"User: {content}\n"
+            else:
+                prompt += f"Assistant: {content}\n"
+        prompt += "Assistant:"
 
-        url = f"{self.cloud_url}?key={self.cloud_api_key}"
-        headers = {"Content-Type": "application/json"}
-        data = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": 0.9,
-                "topK": 40,
-                "topP": 0.95,
-                "maxOutputTokens": 1024,
-            }
+        url = f"https://api.cloudflare.com/client/v4/accounts/{self.cloudflare_account_id}/ai/run/@cf/meta/llama-3.1-8b-instruct"
+        headers = {
+            "Authorization": f"Bearer {self.cloudflare_api_key}",
+            "Content-Type": "application/json"
         }
-        if personality:
-            data["systemInstruction"] = {"parts": [{"text": personality}]}
+        payload = {
+            "prompt": prompt,
+            "max_tokens": 500,
+            "temperature": 0.9
+        }
 
-        req = urllib.request.Request(url, data=json.dumps(data).encode("utf-8"), headers=headers, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                response_data = json.loads(response.read().decode("utf-8"))
-                if "candidates" in response_data and response_data["candidates"]:
-                    return response_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("result", {}).get("response", "No response")
+            else:
+                print(f"Cloudflare error: {response.status_code} - {response.text}")
                 return None
         except Exception as e:
-            print(f"Cloud call error: {e}")
-            raise
+            print(f"Cloudflare AI error: {e}")
+            return None
 
     def _get_style_instruction(self, user_id):
         stats = self.profile.get_stats(user_id)
@@ -369,12 +381,12 @@ class BrainRouter:
         if not self.energy.is_available():
             if self.energy.is_sleeping:
                 if self.energy.sleep_until and datetime.now() < self.energy.sleep_until:
-                    return {"source": "sleeping", "response": "💤"}
+                    return {"source": "sleeping", "response": self._call_local_brain(messages) or "💤"}
                 else:
                     self.energy._wake_up()
-                    return {"source": "waking_up", "response": "✨"}
+                    return {"source": "waking_up", "response": self._call_local_brain(messages) or "✨"}
             self.energy._go_to_sleep()
-            return {"source": "going_to_sleep", "response": "💤"}
+            return {"source": "going_to_sleep", "response": self._call_local_brain(messages) or "💤"}
 
         last_user_msg = None
         for msg in reversed(messages):
@@ -382,6 +394,7 @@ class BrainRouter:
                 last_user_msg = msg.get("content", "")
                 break
 
+        # Try local brain first
         local_answer = self._call_local_brain(messages)
         if local_answer is not None:
             if last_user_msg:
@@ -397,82 +410,41 @@ class BrainRouter:
                 pass
             return {"source": "local_brain", "response": local_answer}
 
-        cloud_error = None
+        # If no local match, try Cloudflare
         if use_cloud_preferred:
-            chat_key = self.energy.get_chat_key()
-            if chat_key is not None:
-                # Use the key from energy system (already set in self.cloud_api_key)
-                if not self.cloud_api_key:
-                    self.cloud_api_key = chat_key
-                style_instr = self._get_style_instruction(uid)
-                if style_instr:
-                    if personality is None:
-                        personality = ""
-                    personality += "\n\n" + style_instr
+            cloud_response = self._call_cloud(messages, personality)
+            if cloud_response:
+                self.energy.conversations_today += 1
+                if last_user_msg:
+                    self.profile.update(uid, last_user_msg, cloud_response)
+                try:
+                    from main import hybrid_memory
+                    if last_user_msg:
+                        hybrid_memory.save_hybrid_memory(
+                            f"Q: {last_user_msg}\nA: {cloud_response}",
+                            importance=3,
+                            category="qa_pair"
+                        )
+                        hybrid_memory.save_hybrid_memory(
+                            f"User asked: {last_user_msg}",
+                            importance=3,
+                            category="user_questions"
+                        )
+                    hybrid_memory.save_hybrid_memory(
+                        f"Ruby replied: {cloud_response}",
+                        importance=2,
+                        category="ruby_responses"
+                    )
+                except:
+                    pass
+                if self.energy.get_energy_status()["energy"] < 20:
+                    cloud_response += "\n\nUgh, that took a lot out of me... I'm getting tired."
+                return {"source": "cloud", "response": cloud_response}
+            else:
+                # Cloud failed – fallback to local brain (already tried)
+                pass
 
-                max_retries = 3
-                backoff_delay = 3
-                for attempt in range(max_retries):
-                    try:
-                        print("========== GEMINI REQUEST ==========")
-                        print(f"Attempt: {attempt + 1}")
-                        response = self._call_cloud(messages, personality)
-                        if response:
-                            print("========== GEMINI SUCCESS ==========")
-                            self.energy.conversations_today += 1
-                            if last_user_msg:
-                                self.profile.update(uid, last_user_msg, response)
-                            try:
-                                from main import hybrid_memory
-                                if last_user_msg:
-                                    hybrid_memory.save_hybrid_memory(
-                                        f"Q: {last_user_msg}\nA: {response}",
-                                        importance=3,
-                                        category="qa_pair"
-                                    )
-                                    hybrid_memory.save_hybrid_memory(
-                                        f"User asked: {last_user_msg}",
-                                        importance=3,
-                                        category="user_questions"
-                                    )
-                                hybrid_memory.save_hybrid_memory(
-                                    f"Ruby replied: {response}",
-                                    importance=2,
-                                    category="ruby_responses"
-                                )
-                            except:
-                                pass
-                            if self.energy.get_energy_status()["energy"] < 20:
-                                response += "\n\nUgh, that took a lot out of me... I'm getting tired."
-                            return {"source": "cloud", "response": response}
-                    except urllib.error.HTTPError as e:
-                        status_code = e.code
-                        try:
-                            error_message = e.read().decode("utf-8")
-                        except:
-                            error_message = str(e)
-                        cloud_error = f"HTTP {status_code}: {error_message}"
-                        print(f"HTTP Error {status_code}: {error_message}")
-                        if status_code == 429:
-                            with self.energy.lock:
-                                if chat_key in self.energy.chat_usage:
-                                    self.energy.chat_usage[chat_key]["count"] = 20
-                            continue
-                        if status_code == 503:
-                            if attempt < max_retries - 1:
-                                print(f"Retrying in {backoff_delay}s...")
-                                time.sleep(backoff_delay)
-                                backoff_delay *= 2
-                                continue
-                        break
-                    except Exception as e:
-                        cloud_error = str(e)
-                        print(f"Unexpected error: {e}")
-                        break
-
-        if cloud_error:
-            return {"source": "cloud_error", "response": f"Gemini error: {cloud_error}"}
-
+        # Ultimate fallback: ask a previous question
         try:
             from main import hybrid_memory
             questions = hybrid_memory.get_memories_by_category("user_questions")
