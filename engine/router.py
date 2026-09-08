@@ -1,4 +1,4 @@
-# engine/router.py - HARDCODED KEY TEST (remove after verification)
+# engine/router.py - HYBRID with environment + config fallback (full)
 import os
 import json
 import time
@@ -15,50 +15,64 @@ try:
 except ImportError:
     config = None
 
+
 class RubyEnergySystem:
     def __init__(self):
         self.chat_keys = []
         self.image_keys = []
 
         def get_key(name):
+            # 1. Try environment variable first (for local testing)
             key = os.getenv(name)
             if key:
                 return key
+            # 2. Fallback to config.py (for APK)
             if config is not None:
                 return getattr(config, name, None)
             return None
 
+        # Load chat keys (1-4)
         for i in range(1, 5):
             key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.chat_keys.append(key)
 
+        # Load image keys (5-9)
         for i in range(5, 10):
             key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.image_keys.append(key)
 
+        # Fallback to single key if none found
         if not self.chat_keys and not self.image_keys:
             fallback = get_key("GEMINI_API_KEY")
             if fallback:
                 self.chat_keys = [fallback]
                 self.image_keys = [fallback]
 
+        # DEBUG: print what was loaded
         print(f"🔑 Loaded {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys.")
+        if self.chat_keys:
+            print(f"   First chat key starts with: {self.chat_keys[0][:10]}...")
+        else:
+            print("   ❌ No chat keys found – check secrets or config.py.")
 
         self.chat_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.chat_keys}
         self.image_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.image_keys}
         self.chat_index = 0
         self.image_index = 0
         self.lock = threading.Lock()
+
         self.is_sleeping = False
         self.sleep_until = None
         self.total_sleeps = 0
         self.current_wake_start = datetime.now()
         self.longest_wake = 0
+
         self.energy = 100
         self.conversations_today = 0
         self.images_today = 0
+
         self.tired_threshold = 30
         self.sleep_threshold = 10
 
@@ -161,7 +175,8 @@ class RubyEnergySystem:
         self.sleep_until = datetime.now() + timedelta(hours=sleep_hours)
 
         self._sync_and_reset()
-        # No memory compression
+
+        # No memory compression – all memories kept forever
         try:
             from main import gmail, cloud, MEMORY_DB, KNOWLEDGE_DB
             if gmail:
@@ -283,16 +298,10 @@ class BrainRouter:
         self.energy = RubyEnergySystem()
         self.local_model_path = local_model_path
 
-        # ======================================================
-        # HARDCODED KEY – replace YOUR_ACTUAL_KEY with your key
-        # ======================================================
-        self.cloud_api_key = "AQ.Ab8RN6K4tQSW9wMk3P3SO29lSGuZg8CvZy_Km7mj5xea60i6mQ"   # <--- PASTE YOUR KEY HERE
-
-        # If you want to fall back to config/env, comment the line above
-        # and uncomment the lines below:
-        # self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
-        # if not self.cloud_api_key and self.energy.chat_keys:
-        #     self.cloud_api_key = self.energy.chat_keys[0]
+        # ---- Let the system load the key (do NOT hardcode) ----
+        self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
+        if not self.cloud_api_key and self.energy.chat_keys:
+            self.cloud_api_key = self.energy.chat_keys[0]
 
         self.cloud_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent"
         self.profile = ConversationProfile()
@@ -411,13 +420,9 @@ class BrainRouter:
         if use_cloud_preferred:
             chat_key = self.energy.get_chat_key()
             if chat_key is not None:
-                # Use the hardcoded key if available, otherwise fallback to chat_key
-                if self.cloud_api_key:
-                    # Already set; no need to override
-                    pass
-                else:
+                # Use the key from energy system (already set in self.cloud_api_key)
+                if not self.cloud_api_key:
                     self.cloud_api_key = chat_key
-
                 style_instr = self._get_style_instruction(uid)
                 if style_instr:
                     if personality is None:
