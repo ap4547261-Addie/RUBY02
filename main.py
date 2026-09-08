@@ -1,4 +1,4 @@
-# main.py - uses environment variables only
+# main.py - handles both string and dict responses from engine
 import sys
 import os
 import traceback
@@ -39,6 +39,7 @@ sys.excepthook = log_crash
 # ============================================
 # IMPORTS
 # ============================================
+# No config.py – we use environment variables
 from engine.router import BrainRouter
 from engine.brain import RubyBrainCore
 from engine.vector_store import HybridMemorySystem
@@ -53,13 +54,13 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 
 # ============================================
-# DEBUG: print environment variables (keys)
+# DEBUG: print environment keys
 # ============================================
-print("=== GEMINI KEYS FROM ENVIRONMENT ===")
+print("=== GEMINI KEYS ENVIRONMENT ===")
 for name in ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY{i}" for i in range(1, 10)]:
     val = os.getenv(name)
     print(f"{name}: {val[:10] if val else 'NOT SET'}")
-print("========================================")
+print("================================")
 
 # ============================================
 # WSGIRef stub (package version)
@@ -113,7 +114,6 @@ except ImportError:
 STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
-# AUTO-COPY token if exists
 token_source = "token_gmail.pickle"
 token_dest = os.path.join(STORAGE_DIR, "token_gmail.pickle")
 if os.path.exists(token_source) and not os.path.exists(token_dest):
@@ -498,19 +498,33 @@ def main_app_ui(page: ft.Page):
 
         try:
             result = ruby_engine.think(user_text)
-            response = result.get("response", "")
-            source = result.get("source", "unknown")
         except Exception as ex:
             response = f"⚠️ Error: {ex}"
             source = "exception"
             log_crash(type(ex), ex, ex.__traceback__)
+            add_message("Ruby", response)
+            conversation_history.append({"role": "user", "content": user_text})
+            conversation_history.append({"role": "assistant", "content": response})
+            save_chat_history()
+            page.snack_bar = ft.SnackBar(ft.Text(f"❌ {response[:200]}"))
+            page.snack_bar.open = True
+            page.update()
+            return
+
+        # Handle if result is a string or dict
+        if isinstance(result, str):
+            response = result
+            source = "unknown"
+        else:
+            response = result.get("response", "")
+            source = result.get("source", "unknown")
 
         add_message("Ruby", response)
         conversation_history.append({"role": "user", "content": user_text})
         conversation_history.append({"role": "assistant", "content": response})
         save_chat_history()
 
-        if source == "cloud_error" or source == "exception":
+        if source in ("cloud_error", "exception"):
             page.snack_bar = ft.SnackBar(ft.Text(f"❌ {response[:200]}"))
             page.snack_bar.open = True
         elif source == "fallback":
@@ -536,7 +550,7 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    print("\n🌹 RUBY APP STARTING (no config.py, using environment variables)")
+    print("\n🌹 RUBY APP STARTING (environment variables only)")
     try:
         ft.app(target=main_app_ui)
     except Exception as e:
