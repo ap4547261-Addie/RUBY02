@@ -1,4 +1,4 @@
-# engine/router.py - HYBRID with environment + config fallback (full)
+# engine/router.py - no config.py, only environment variables
 import os
 import json
 import time
@@ -10,11 +10,6 @@ from datetime import datetime, timedelta
 import random
 from tools.profile import ConversationProfile
 
-try:
-    import config
-except ImportError:
-    config = None
-
 
 class RubyEnergySystem:
     def __init__(self):
@@ -22,57 +17,43 @@ class RubyEnergySystem:
         self.image_keys = []
 
         def get_key(name):
-            # 1. Try environment variable first (for local testing)
-            key = os.getenv(name)
-            if key:
-                return key
-            # 2. Fallback to config.py (for APK)
-            if config is not None:
-                return getattr(config, name, None)
-            return None
+            return os.getenv(name)
 
-        # Load chat keys (1-4)
         for i in range(1, 5):
             key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.chat_keys.append(key)
 
-        # Load image keys (5-9)
         for i in range(5, 10):
             key = get_key(f"GEMINI_API_KEY{i}")
             if key:
                 self.image_keys.append(key)
 
-        # Fallback to single key if none found
         if not self.chat_keys and not self.image_keys:
             fallback = get_key("GEMINI_API_KEY")
             if fallback:
                 self.chat_keys = [fallback]
                 self.image_keys = [fallback]
 
-        # DEBUG: print what was loaded
         print(f"🔑 Loaded {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys.")
         if self.chat_keys:
             print(f"   First chat key starts with: {self.chat_keys[0][:10]}...")
         else:
-            print("   ❌ No chat keys found – check secrets or config.py.")
+            print("   ❌ No chat keys found – check environment variables.")
 
         self.chat_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.chat_keys}
         self.image_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.image_keys}
         self.chat_index = 0
         self.image_index = 0
         self.lock = threading.Lock()
-
         self.is_sleeping = False
         self.sleep_until = None
         self.total_sleeps = 0
         self.current_wake_start = datetime.now()
         self.longest_wake = 0
-
         self.energy = 100
         self.conversations_today = 0
         self.images_today = 0
-
         self.tired_threshold = 30
         self.sleep_threshold = 10
 
@@ -175,8 +156,7 @@ class RubyEnergySystem:
         self.sleep_until = datetime.now() + timedelta(hours=sleep_hours)
 
         self._sync_and_reset()
-
-        # No memory compression – all memories kept forever
+        # No memory compression
         try:
             from main import gmail, cloud, MEMORY_DB, KNOWLEDGE_DB
             if gmail:
@@ -298,7 +278,7 @@ class BrainRouter:
         self.energy = RubyEnergySystem()
         self.local_model_path = local_model_path
 
-        # ---- Let the system load the key (do NOT hardcode) ----
+        # Load key from environment (no config.py)
         self.cloud_api_key = cloud_api_key or os.getenv("GEMINI_API_KEY")
         if not self.cloud_api_key and self.energy.chat_keys:
             self.cloud_api_key = self.energy.chat_keys[0]
@@ -417,6 +397,7 @@ class BrainRouter:
                 pass
             return {"source": "local_brain", "response": local_answer}
 
+        cloud_error = None
         if use_cloud_preferred:
             chat_key = self.energy.get_chat_key()
             if chat_key is not None:
@@ -470,6 +451,7 @@ class BrainRouter:
                             error_message = e.read().decode("utf-8")
                         except:
                             error_message = str(e)
+                        cloud_error = f"HTTP {status_code}: {error_message}"
                         print(f"HTTP Error {status_code}: {error_message}")
                         if status_code == 429:
                             with self.energy.lock:
@@ -484,8 +466,12 @@ class BrainRouter:
                                 continue
                         break
                     except Exception as e:
+                        cloud_error = str(e)
                         print(f"Unexpected error: {e}")
                         break
+
+        if cloud_error:
+            return {"source": "cloud_error", "response": f"Gemini error: {cloud_error}"}
 
         try:
             from main import hybrid_memory
