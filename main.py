@@ -1,4 +1,4 @@
-# main.py - COMPLETE WITH KEY EXPORT, DEBUG, AND ALL FIXES
+# main.py - uses environment variables only
 import sys
 import os
 import traceback
@@ -9,9 +9,8 @@ import flet as ft
 from datetime import datetime
 
 # ============================================
-# CRASH LOGGING (MUST BE FIRST)
+# CRASH LOGGING
 # ============================================
-
 CRASH_LOG_PATH = os.path.join(os.getenv("FLET_APP_STORAGE_DATA", "."), "ruby_crash.txt")
 
 def init_crash_logging():
@@ -40,8 +39,6 @@ sys.excepthook = log_crash
 # ============================================
 # IMPORTS
 # ============================================
-
-import config
 from engine.router import BrainRouter
 from engine.brain import RubyBrainCore
 from engine.vector_store import HybridMemorySystem
@@ -56,32 +53,16 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 
 # ============================================
-# FIX: Export Gemini keys from config.py to environment
-# and print debug info to verify keys are loaded.
+# DEBUG: print environment variables (keys)
 # ============================================
-key_names = ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY{i}" for i in range(1, 10)]
-print("=== GEMINI KEYS DEBUG ===")
-for name in key_names:
-    val = getattr(config, name, None)
-    env_val = os.getenv(name)
-    if val and not env_val:
-        os.environ[name] = val
-        print(f"🔑 Exported {name} to environment (value starts with: {val[:10]}...)")
-    elif val and env_val:
-        print(f"✅ {name} already in environment (value starts with: {env_val[:10]}...)")
-    elif not val and env_val:
-        print(f"ℹ️ {name} found only in environment (value starts with: {env_val[:10]}...)")
-    else:
-        print(f"❌ {name} not found in config or environment!")
-print("=========================")
+print("=== GEMINI KEYS FROM ENVIRONMENT ===")
+for name in ["GEMINI_API_KEY"] + [f"GEMINI_API_KEY{i}" for i in range(1, 10)]:
+    val = os.getenv(name)
+    print(f"{name}: {val[:10] if val else 'NOT SET'}")
+print("========================================")
 
 # ============================================
-# VISION SYSTEM DISABLED
-# ============================================
-# from tools.vision import VisionEngine
-
-# ============================================
-# WSGIRef stub (package version) – ensures backup imports don't crash on Android
+# WSGIRef stub (package version)
 # ============================================
 try:
     import wsgiref
@@ -89,12 +70,10 @@ except ImportError:
     import sys
     from types import ModuleType
 
-    # Create the main wsgiref package
     wsgiref = ModuleType('wsgiref')
-    wsgiref.__path__ = []   # mark as a package
+    wsgiref.__path__ = []
     sys.modules['wsgiref'] = wsgiref
 
-    # Create wsgiref.headers submodule
     headers = ModuleType('wsgiref.headers')
     wsgiref.headers = headers
     sys.modules['wsgiref.headers'] = headers
@@ -103,12 +82,10 @@ except ImportError:
             pass
     headers.Headers = Headers
 
-    # Create wsgiref.simple_server submodule (required by google_auth_oauthlib)
     simple_server = ModuleType('wsgiref.simple_server')
     wsgiref.simple_server = simple_server
     sys.modules['wsgiref.simple_server'] = simple_server
 
-    # Provide minimal dummy classes/functions
     class WSGIServer:
         def __init__(self, *args, **kwargs):
             pass
@@ -121,7 +98,6 @@ except ImportError:
     simple_server.WSGIRequestHandler = WSGIRequestHandler
     simple_server.make_server = make_server
 
-    # Create wsgiref.util submodule (if needed)
     util = ModuleType('wsgiref.util')
     wsgiref.util = util
     sys.modules['wsgiref.util'] = util
@@ -132,21 +108,18 @@ except ImportError:
     print("⚠️ wsgiref stub (package) created – backup may have limited functionality.")
 
 # ============================================
-# DEFINE STORAGE DIR EARLY (so backup can use it)
+# STORAGE DIR
 # ============================================
-
 STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
-# ============================================
-# AUTO-COPY token_gmail.pickle to storage on first run (fallback)
-# ============================================
+# AUTO-COPY token if exists
 token_source = "token_gmail.pickle"
 token_dest = os.path.join(STORAGE_DIR, "token_gmail.pickle")
 if os.path.exists(token_source) and not os.path.exists(token_dest):
     import shutil
     shutil.copy(token_source, token_dest)
-    print(f"✅ token_gmail.pickle copied from {token_source} to {token_dest}")
+    print(f"✅ token_gmail.pickle copied to {token_dest}")
 elif os.path.exists(token_dest):
     print(f"✅ token_gmail.pickle already exists at {token_dest}")
 else:
@@ -157,9 +130,8 @@ KNOWLEDGE_DB = os.path.join(STORAGE_DIR, "ruby_knowledge.db")
 HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 
 # ============================================
-# BACKUP SYSTEM (Gmail + Cloud) - OPTIONAL
+# BACKUP SYSTEM (Gmail + Cloud)
 # ============================================
-
 def ensure_credentials():
     creds_content = os.getenv("GMAIL_CREDENTIANLS_JSON")
     if creds_content:
@@ -178,21 +150,16 @@ def ensure_credentials():
             return "credentials.json"
     return None
 
-# Initialize Gmail backup (will be None until token exists)
 from tools.gmail_backup import GmailBackup
 gmail = None
 gmail_email = "Not tied"
 credentials_file = ensure_credentials()
 
-# ============================================
-# GMAIL OAUTH SETUP (from within the app)
-# ============================================
 from google_auth_oauthlib.flow import InstalledAppFlow
 import webbrowser
 import pickle
 
 def start_gmail_oauth(page):
-    """Opens a dialog to connect Gmail via OAuth (run_console flow)."""
     if not credentials_file or not os.path.exists(credentials_file):
         page.snack_bar = ft.SnackBar(ft.Text("❌ credentials.json not found. Add GMAIL_CREDENTIANLS_JSON secret."))
         page.snack_bar.open = True
@@ -203,7 +170,6 @@ def start_gmail_oauth(page):
     flow = InstalledAppFlow.from_client_secrets_file(credentials_file, SCOPES)
     auth_url, _ = flow.authorization_url(prompt='consent')
 
-    # Create dialog
     code_field = ft.TextField(hint_text="Paste authorization code here", width=300)
     status_text = ft.Text("")
 
@@ -216,11 +182,9 @@ def start_gmail_oauth(page):
         try:
             flow.fetch_token(code=code)
             creds = flow.credentials
-            # Save token
             token_path = os.path.join(STORAGE_DIR, "token_gmail.pickle")
             with open(token_path, 'wb') as f:
                 pickle.dump(creds, f)
-            # Reinitialize Gmail
             global gmail, gmail_email
             gmail = GmailBackup(token_file=token_path)
             if hasattr(creds, 'id_token') and creds.id_token:
@@ -228,7 +192,6 @@ def start_gmail_oauth(page):
             page.close_dialog()
             page.snack_bar = ft.SnackBar(ft.Text(f"✅ Gmail connected: {gmail_email}"))
             page.snack_bar.open = True
-            # Update header
             update_header(page)
             page.update()
         except Exception as err:
@@ -243,9 +206,7 @@ def start_gmail_oauth(page):
         content=ft.Column([
             ft.Text("1. Open this URL in your browser:"),
             ft.Text(auth_url, selectable=True, size=12),
-            ft.Row([
-                ft.TextButton("Open in Browser", on_click=open_url),
-            ]),
+            ft.Row([ft.TextButton("Open in Browser", on_click=open_url)]),
             ft.Text("2. Log in and grant permission."),
             ft.Text("3. Copy the authorization code and paste it below."),
             code_field,
@@ -259,7 +220,6 @@ def start_gmail_oauth(page):
     page.open_dialog(dialog)
 
 def connect_gmail_button(page):
-    # Use a text button to avoid icon constant errors
     return ft.TextButton(
         "Connect Gmail",
         on_click=lambda e: start_gmail_oauth(page),
@@ -304,28 +264,16 @@ def restore_from_backups():
         print("ℹ️ No backup found, starting fresh.")
 
 # ============================================
-# 1. INITIALIZE CORE BRAIN MODULES
+# INITIALISE CORE
 # ============================================
-
-router = BrainRouter(cloud_api_key=getattr(config, "GEMINI_API_KEY", None))
-brain_core = RubyBrainCore(api_key=getattr(config, "GEMINI_API_KEY", None))
-
-# ============================================
-# 2. INITIALIZE LOCAL MEMORY SYSTEM (already defined above)
-# ============================================
+router = BrainRouter(cloud_api_key=os.getenv("GEMINI_API_KEY"))
+brain_core = RubyBrainCore(api_key=os.getenv("GEMINI_API_KEY"))
 
 hybrid_memory = HybridMemorySystem(
     sqlite_path=MEMORY_DB,
     pinecone_api_key=None,
     index_host=None
 )
-
-PINECONE_API_KEY = getattr(config, "PINECONE_API_KEY", "")
-PINECONE_INDEX_HOST = getattr(config, "PINECONE_INDEX_HOST", "")
-
-# ============================================
-# 3. SEED RUBY'S CORE MEMORIES
-# ============================================
 
 try:
     for memory in CORE_MEMORIES:
@@ -334,45 +282,15 @@ try:
 except Exception as e:
     print(f"⚠️ Memory seeding failed: {e}")
 
-# ============================================
-# 4. RESTORE FROM BACKUP IF MEMORY IS EMPTY
-# ============================================
-
 if hybrid_memory.get_interaction_count() == 0:
     restore_from_backups()
 
-# ============================================
-# 5. INITIALIZE LEARNING SYSTEMS
-# ============================================
-
 data_ingestion = DataIngestion(db_path=KNOWLEDGE_DB)
-print("📚 DataIngestion initialized")
-
 web_learner = WebLearner(data_ingestion)
-print("🌐 WebLearner initialized")
-
 video_learner = VideoLearner(data_ingestion)
-print("🎬 VideoLearner initialized")
 
-# ============================================
-# 5.5 VISION ENGINE – DISABLED
-# ============================================
 vision_engine = None
-print("👁️ Vision Engine disabled (torch not available).")
-
-# ============================================
-# 6. INITIALIZE INSTAGRAM CONNECTOR (without vision)
-# ============================================
-instagram_connector = InstagramConnector(
-    hybrid_memory
-    # vision_engine=vision_engine
-)
-print("📸 Instagram Connector initialized")
-
-# ============================================
-# 7. INITIALIZE RUBY ENGINE
-# ============================================
-
+instagram_connector = InstagramConnector(hybrid_memory)
 ruby_engine = RubyEngine(
     memory=hybrid_memory,
     knowledge=data_ingestion,
@@ -381,11 +299,6 @@ ruby_engine = RubyEngine(
     brain_core=brain_core,
     personality=RUBY_PROMPT
 )
-print("🧠 RubyEngine initialized!")
-
-# ============================================
-# 8. WEBSOCKET SERVER (BACKGROUND)
-# ============================================
 
 websocket_handler = WebSocketHandler(
     hybrid_memory,
@@ -394,7 +307,6 @@ websocket_handler = WebSocketHandler(
     video_learner,
     instagram_connector
 )
-print("🔌 WebSocketHandler initialized")
 
 def start_websocket_server():
     loop = asyncio.new_event_loop()
@@ -416,9 +328,8 @@ ws_thread.start()
 print("🔌 WebSocket server running on ws://localhost:8765")
 
 # ============================================
-# 9. CHAT HISTORY PERSISTENCE
+# CHAT HISTORY
 # ============================================
-
 def load_chat_history():
     if os.path.exists(HISTORY_FILE):
         try:
@@ -439,9 +350,8 @@ conversation_history = load_chat_history()
 print(f"📜 Loaded {len(conversation_history)} chat messages")
 
 # ============================================
-# 10. RUBY'S PERSONALITY PROMPT (FULL VERSION)
+# PERSONALITY PROMPT
 # ============================================
-
 def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
     today = datetime.now()
     age = today.year - 2004 - ((today.month, today.day) < (8, 16))
@@ -480,9 +390,8 @@ def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
 RUBY_PROMPT = build_ruby_prompt(0)
 
 # ============================================
-# 11. UI STATE & HELPERS
+# UI
 # ============================================
-
 ui_page_ref = None
 chat_list_ref = None
 status_label_ref = None
@@ -512,7 +421,6 @@ def update_ruby_status():
             print(f"Status update error: {e}")
 
 def update_header(page):
-    """Update the header text with current Gmail email."""
     if header_ref:
         header_ref.content.controls[0].value = f"RUBY // {gmail_email}"
         page.update()
@@ -537,14 +445,9 @@ def add_message(sender, text, is_user=False, image_path=None):
         chat_list_ref.controls.append(bubble)
         ui_page_ref.update()
 
-# ============================================
-# 12. MAIN UI (Vision commands removed)
-# ============================================
-
 def main_app_ui(page: ft.Page):
     global ui_page_ref, chat_list_ref, conversation_history, status_label_ref, header_ref
     ui_page_ref = page
-    
     page.title = "Ruby"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = "#101014"
@@ -571,12 +474,7 @@ def main_app_ui(page: ft.Page):
         )
         chat_list.controls.append(bubble)
 
-    status_label = ft.Text(
-        "✨ Checking status...",
-        size=11,
-        color=ft.Colors.GREY_400,
-        weight=ft.FontWeight.NORMAL
-    )
+    status_label = ft.Text("✨ Checking status...", size=11, color=ft.Colors.GREY_400, weight=ft.FontWeight.NORMAL)
     status_label_ref = status_label
 
     user_input = ft.TextField(
@@ -599,30 +497,31 @@ def main_app_ui(page: ft.Page):
         page.update()
 
         try:
-            response = ruby_engine.think(user_text)
+            result = ruby_engine.think(user_text)
+            response = result.get("response", "")
+            source = result.get("source", "unknown")
         except Exception as ex:
             response = f"⚠️ Error: {ex}"
+            source = "exception"
             log_crash(type(ex), ex, ex.__traceback__)
 
         add_message("Ruby", response)
         conversation_history.append({"role": "user", "content": user_text})
         conversation_history.append({"role": "assistant", "content": response})
         save_chat_history()
+
+        if source == "cloud_error" or source == "exception":
+            page.snack_bar = ft.SnackBar(ft.Text(f"❌ {response[:200]}"))
+            page.snack_bar.open = True
+        elif source == "fallback":
+            page.snack_bar = ft.SnackBar(ft.Text("⚠️ Using local brain (Gemini failed silently)"))
+            page.snack_bar.open = True
+
         page.update()
 
-    send_btn = ft.TextButton(
-        "Send",
-        on_click=send_message,
-        style=ft.ButtonStyle(color=ft.Colors.CYAN_400),
-    )
+    send_btn = ft.TextButton("Send", on_click=send_message, style=ft.ButtonStyle(color=ft.Colors.CYAN_400))
+    input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
-    input_row = ft.Row(
-        [user_input, send_btn],
-        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-    )
-
-    # Header with Gmail connect button (text button)
     header_row = ft.Row([
         ft.Text(f"RUBY // {gmail_email}", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
         status_label,
@@ -631,26 +530,13 @@ def main_app_ui(page: ft.Page):
     header = ft.Container(content=header_row, padding=5)
     header_ref = header
 
-    page.add(
-        ft.Column([
-            header,
-            chat_list,
-            input_row
-        ], expand=True)
-    )
+    page.add(ft.Column([header, chat_list, input_row], expand=True))
 
     update_ruby_status()
     page.update()
 
-# ============================================
-# 13. STARTUP
-# ============================================
-
 if __name__ == "__main__":
-    print("\n" + "="*60)
-    print("🌹 RUBY APP STARTING (Vision disabled, wsgiref stub active)")
-    print(f"📧 Gmail account: {gmail_email}")
-    print("="*60 + "\n")
+    print("\n🌹 RUBY APP STARTING (no config.py, using environment variables)")
     try:
         ft.app(target=main_app_ui)
     except Exception as e:
