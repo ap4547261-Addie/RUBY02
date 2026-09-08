@@ -45,10 +45,10 @@ jobs:
 
     - name: Build APK
       env:
-        # Cloudflare credentials (if you want to set them via secrets)
-        CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
-        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        # Other secrets (optional)
+        # ---- Pinecone (for vector memory) ----
+        PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+        PINECONE_INDEX_HOST: ${{ secrets.PINECONE_INDEX_HOST }}
+        # ---- Optional Gmail backup ----
         GMAIL_CREDENTIANLS_JSON: ${{ secrets.GMAIL_CREDENTIANLS_JSON }}
         GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
         FLET_SUPPRESS_PROMPTS: "true"
