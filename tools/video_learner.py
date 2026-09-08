@@ -287,3 +287,14 @@ class VideoLearner:
                 }
         except Exception as e:
             return {"success": False, "message": f"Search error: {str(e)}"}
+
+    # ============================================
+    # NEW: search_and_learn wrapper for gatherer
+    # ============================================
+    def search_and_learn(self, query: str) -> Dict:
+        """Wrapper for learn_from_youtube_search – returns consistent dict."""
+        result = self.learn_from_youtube_search(query)
+        return {
+            "success": result.get("success", False),
+            "message": result.get("message", "No result")
+        }
