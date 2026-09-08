@@ -1,4 +1,4 @@
-# main.py - FINAL (handles config.py if exists, else environment)
+# main.py - FINAL (fixed order, websocket_handler defined before tools)
 import sys
 import os
 import traceback
@@ -68,9 +68,6 @@ try:
             print(f"❌ {name} not set in config")
 except ImportError:
     print("ℹ️ config.py not found – using environment variables (local testing)")
-    # If running locally, ensure keys are set in environment (or hardcode for testing)
-    # if not os.getenv("GEMINI_API_KEY"):
-    #     os.environ["GEMINI_API_KEY"] = "your-key-here"
 
 # ============================================
 # DEBUG: print current environment keys
@@ -311,6 +308,16 @@ video_learner = VideoLearner(data_ingestion)
 vision_engine = None
 instagram_connector = InstagramConnector(hybrid_memory)
 
+# ---- CREATE WEBSOCKET HANDLER (BEFORE ENGINE) ----
+websocket_handler = WebSocketHandler(
+    hybrid_memory,
+    data_ingestion,
+    web_learner,
+    video_learner,
+    instagram_connector
+)
+print("🔌 WebSocketHandler initialized")
+
 # ---- Register tools with RubyEngine ----
 tools = {
     "instagram": instagram_connector,
@@ -326,15 +333,9 @@ ruby_engine = RubyEngine(
     brain_core=brain_core,
     personality=RUBY_PROMPT
 )
+print("🧠 RubyEngine initialized!")
 
-websocket_handler = WebSocketHandler(
-    hybrid_memory,
-    data_ingestion,
-    web_learner,
-    video_learner,
-    instagram_connector
-)
-
+# ---- START WEBSOCKET SERVER ----
 def start_websocket_server():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
