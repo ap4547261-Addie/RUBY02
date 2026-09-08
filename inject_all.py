@@ -1,4 +1,4 @@
-# inject_all.py – with block list to filter out creation‑related and personal content
+# inject_all.py – Universal training data injector (fixed for app compatibility)
 import os
 import json
 import sqlite3
@@ -7,17 +7,25 @@ from datetime import datetime
 import time
 import google.generativeai as genai
 
+# ============================================
+# 1. DATABASE PATH – same as the running app
+# ============================================
+STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
+os.makedirs(STORAGE_DIR, exist_ok=True)
+DB_PATH = os.path.join(STORAGE_DIR, "ruby_memory.db")
+DATA_FOLDER = "training_data"
+
+# ============================================
+# 2. GEMINI SETUP
+# ============================================
 API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
     raise Exception("GEMINI_API_KEY not set")
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel("gemini-2.0-flash-exp")
 
-DB_PATH = "ruby_memory.db"
-DATA_FOLDER = "training_data"
-
 # ============================================
-# BLOCK LIST – add any phrases to skip
+# 3. BLOCK LIST – skip personal and creation‑related content
 # ============================================
 BLOCKED_PHRASES = [
     # Personal info
@@ -26,7 +34,6 @@ BLOCKED_PHRASES = [
     "my phone",
     "my address",
     "my birthday",
-
     # Ruby's creation / development
     "I am creating Ruby",
     "I am building Ruby",
@@ -43,10 +50,8 @@ BLOCKED_PHRASES = [
     "local brain",
     "gemini key",
     "api key",
-
-    # Any specific names you want to block
+    # Add any other names/phrases you want to block
     # "YourName",
-    # "FriendName",
 ]
 
 def is_blocked(text):
@@ -57,6 +62,9 @@ def is_blocked(text):
             return True
     return False
 
+# ============================================
+# 4. FILE PARSING (supports Instagram, ChatGPT, etc.)
+# ============================================
 def parse_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -96,6 +104,9 @@ def parse_file(file_path):
                 return convo
     return ""
 
+# ============================================
+# 5. GEMINI Q&A GENERATION
+# ============================================
 def generate_qa_pairs(conversation_text):
     prompt = f"""
 You are Ruby. Extract key facts, opinions, and personality traits from this conversation.
@@ -110,18 +121,35 @@ Conversation:
     response = model.generate_content(prompt)
     return response.text
 
+# ============================================
+# 6. INJECT INTO DATABASE (app‑compatible schema)
+# ============================================
 def inject_qa_pairs(qa_text):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+
+    # Create tables matching HybridMemorySystem
     c.execute('''
         CREATE TABLE IF NOT EXISTS memories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            text TEXT NOT NULL,
-            category TEXT,
-            importance INTEGER DEFAULT 3,
-            timestamp INTEGER
+            text TEXT UNIQUE,
+            importance INTEGER DEFAULT 1,
+            synced INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            processed_at TIMESTAMP,
+            category TEXT
         )
     ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS stats (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
+    c.execute('''
+        INSERT OR IGNORE INTO stats (key, value) VALUES ('interaction_count', '0')
+    ''')
+
     lines = qa_text.strip().split("\n")
     q = None
     for line in lines:
@@ -134,14 +162,20 @@ def inject_qa_pairs(qa_text):
             if is_blocked(full):
                 q = None
                 continue
-            c.execute('''
-                INSERT INTO memories (text, category, importance, timestamp)
-                VALUES (?, ?, ?, ?)
-            ''', (full, "qa_pair", 3, int(datetime.now().timestamp())))
+            # Avoid duplicates
+            c.execute('SELECT id FROM memories WHERE text=?', (full,))
+            if not c.fetchone():
+                c.execute('''
+                    INSERT INTO memories (text, category, importance, created_at)
+                    VALUES (?, ?, ?, ?)
+                ''', (full, "qa_pair", 3, datetime.now().isoformat()))
             q = None
     conn.commit()
     conn.close()
 
+# ============================================
+# 7. PROCESS ALL FILES IN training_data/
+# ============================================
 def process_all():
     json_files = glob.glob(f"{DATA_FOLDER}/**/*.json", recursive=True)
     if not json_files:
@@ -157,9 +191,12 @@ def process_all():
         qa = generate_qa_pairs(convo)
         inject_qa_pairs(qa)
         total += 1
-        time.sleep(0.5)
+        time.sleep(0.5)   # avoid rate limits
     print(f"✅ Processed {total} files.")
 
+# ============================================
+# 8. MAIN
+# ============================================
 if __name__ == "__main__":
     if not os.path.exists(DATA_FOLDER):
         print(f"Directory {DATA_FOLDER} not found. Skipping.")
