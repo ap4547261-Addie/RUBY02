@@ -24,6 +24,7 @@ class RubyEngine:
     def think(self, user_message):
         """
         Main thinking method - processes user message and generates response
+        Returns a dict: {"response": str, "source": str}
         """
         # 1. Fetch current stats and increment message depth
         current_state = self.memory.get_state()
@@ -61,6 +62,7 @@ class RubyEngine:
         # 6. Generate response via BrainRouter
         router_result = self.router.route_request(messages, personality=current_personality)
         response_text = router_result.get("response", "")
+        source = router_result.get("source", "unknown")
 
         # 7. Check for media generation tags and format them
         response_text = self._process_media_tags(response_text)
@@ -68,7 +70,8 @@ class RubyEngine:
         # 8. Post-process tags (like [SAVE_MEMORY:...]) and wrap up
         self.memory.process(response_text, user_message)
 
-        return response_text
+        # Return a dict with both response and source
+        return {"response": response_text, "source": source}
 
     def _process_media_tags(self, response_text: str) -> str:
         """
