@@ -1,10 +1,30 @@
+# ============================================
+# RUBY – OFFLINE SELF-LEARNING SYSTEM
+# ============================================
+
+# Core UI Framework
 flet>=0.25.0
-google-genai>=0.3.0
+
+# Web & HTTP (web learning, YouTube search)
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
+
+# WebSocket server
 websockets>=12.0
-google-api-python-client>=2.108.0
-google-auth-oauthlib>=1.1.0   
-google-cloud-storage>=2.14.0
+
+# Image processing
 pillow>=10.0.0
+
+# YouTube tools (no API key)
+youtube-transcript-api
+youtube-search-python
+
+# ============================================
+# OPTIONAL – uncomment if you use Pinecone or backup
+# ============================================
+# pinecone-client>=3.0.0
+# google-api-python-client>=2.108.0
+# google-auth-oauthlib>=1.1.0
+# google-cloud-storage>=2.14.0
+# google-auth-httplib2>=0.1.0
