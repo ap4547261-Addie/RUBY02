@@ -3,9 +3,8 @@ import os
 from datetime import datetime
 from engine.vector_store import HybridMemorySystem
 from engine.router import BrainRouter
-from engine.brain import RubyBrainCore
+# from engine.brain import RubyBrainCore   # removed – now using LocalBrain
 from personality.ruby import RUBY_PROMPT
-
 
 class RubyEngine:
     def __init__(self, memory=None, knowledge=None, tools=None, router=None, brain_core=None, personality=None):
@@ -14,11 +13,14 @@ class RubyEngine:
         self.knowledge = knowledge  # DataIngestion
         self.tools = tools  # Your tools
         self.router = router if router is not None else BrainRouter()
-        self.brain_core = brain_core if brain_core is not None else RubyBrainCore()
-        
+        # brain_core must be provided (e.g., LocalBrain from main)
+        if brain_core is None:
+            raise ValueError("brain_core must be provided (e.g., LocalBrain from main.py)")
+        self.brain_core = brain_core
+
         # Fallback to RUBY_PROMPT if no custom personality string is passed
         self.personality = personality if personality is not None else RUBY_PROMPT
-        
+
         print("🧠 RubyEngine initialized!")
 
     def think(self, user_message):
@@ -29,7 +31,7 @@ class RubyEngine:
         # 1. Fetch current stats and increment message depth
         current_state = self.memory.get_state()
         interaction_depth = current_state.get("interaction_depth", 0) + 1
-        
+
         # 2. Evaluate emotional shift based on depth
         updated_state = self._evaluate_emotion(user_message, current_state, interaction_depth)
 
@@ -42,7 +44,7 @@ class RubyEngine:
         # 5. Build her dynamic personality prompt with live stats
         today = datetime.now()
         age = today.year - 2004 - ((today.month, today.day) < (8, 16))
-        
+
         current_personality = (
             self.personality
             .replace("{interaction_depth}", str(updated_state.get("interaction_depth", 0)))
@@ -56,7 +58,7 @@ class RubyEngine:
         if context and context != "No deep memories formed yet.":
             messages.append({"role": "user", "content": f"[Retrieved Memory Context]: {context}"})
             messages.append({"role": "model", "content": "Noted."})
-            
+
         messages.append({"role": "user", "content": user_message})
 
         # 6. Generate response via BrainRouter
@@ -64,8 +66,8 @@ class RubyEngine:
         response_text = router_result.get("response", "")
         source = router_result.get("source", "unknown")
 
-        # 7. Check for media generation tags and format them
-        response_text = self._process_media_tags(response_text)
+        # 7. Media generation is disabled (no Gemini) – remove or stub if needed
+        # response_text = self._process_media_tags(response_text)  # disabled
 
         # 8. Post-process tags (like [SAVE_MEMORY:...]) and wrap up
         self.memory.process(response_text, user_message)
@@ -73,31 +75,7 @@ class RubyEngine:
         # Return a dict with both response and source
         return {"response": response_text, "source": source}
 
-    def _process_media_tags(self, response_text: str) -> str:
-        """
-        Scans response for image/video tags, applies phone-camera realism filters.
-        """
-        if "[GENERATE_IMAGE:" in response_text:
-            try:
-                start = response_text.index("[GENERATE_IMAGE:") + len("[GENERATE_IMAGE:")
-                end = response_text.index("]", start)
-                raw_prompt = response_text[start:end].strip()
-                
-                phone_camera_prompt = (
-                    "Raw unfiltered smartphone photo, taken on a phone front camera, "
-                    "natural skin texture with visible pores, casual everyday lighting, "
-                    "slight digital noise, unpolished candid snapshot, realistic amateur framing, "
-                    f"no studio lighting, {raw_prompt}"
-                )
-                
-                image_path = self.brain_core.generate_image(phone_camera_prompt)
-                if image_path:
-                    response_text += f"\n[Image Generated: {image_path}]"
-                    print(f"📸 Image generated: {image_path}")
-            except Exception as e:
-                print(f"Media tag processing error: {e}")
-                
-        return response_text
+    # _process_media_tags removed – no image/video generation without Gemini
 
     def _evaluate_emotion(self, message, state, depth):
         """
@@ -109,7 +87,7 @@ class RubyEngine:
             mood = "warm, sarcastic, easily flustered, and showing hints of love"
         else:
             mood = "guarded, distant, and easily annoyed"
-            
+
         return {
             "interaction_depth": depth,
             "mood": mood
@@ -149,7 +127,7 @@ class RubyEngine:
             "brain_core": "active" if self.brain_core else "inactive",
             "personality_loaded": bool(self.personality)
         }
-        
+
         # Add energy status if available
         if self.router and hasattr(self.router, 'energy'):
             energy_status = self.router.energy.get_energy_status()
@@ -157,7 +135,7 @@ class RubyEngine:
             status["sleeping"] = self.router.energy.is_sleeping
             if self.router.energy.is_sleeping:
                 status["wake_at"] = self.router.energy.sleep_until
-        
+
         return status
 
     def force_wake(self):
