@@ -18,7 +18,7 @@ DB_PATH = os.path.join(STORAGE_DIR, "ruby_memory.db")
 TRAINING_DIR = "training_data"          # folder with JSON files
 
 # Ollama model – adjust if you use a different one
-OLLAMA_MODEL = "phi3:3.8b-mini-4k-instruct-q4_K_M"  # or "tinyllama"
+OLLAMA_MODEL = "tinyllama"   # lightweight, works on 4GB RAM
 
 # ============================================
 # OLLAMA Q&A GENERATOR
