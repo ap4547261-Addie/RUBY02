@@ -1,5 +1,4 @@
-# main.py - OFFLINE with Pinecone, Knowledge Gatherer, and full UI
-# MODIFIED: Uses tinyllama via Ollama HTTP API (robust local inference)
+# main.py - OFFLINE with Pinecone, Knowledge Gatherer, and dynamic port-scanning LocalBrain
 
 import sys
 import os
@@ -62,14 +61,31 @@ from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 from tools.knowledge_gatherer import KnowledgeGatherer
 
 # ============================================
-# LOCALBRAIN CLASS – uses Ollama HTTP API
+# LOCALBRAIN CLASS – Auto-detects Ollama HTTP API Port
 # ============================================
 class LocalBrain:
     def __init__(self, model="tinyllama"):
         self.model = model
-        self.api_url = "http://127.0.0.1:33779/api/generate"
+        self.api_url = None
+
+    def _find_active_port(self):
+        ports_to_check = [11434, 33779, 41705, 8080, 11435]
+        for port in ports_to_check:
+            url = f"http://127.0.0.1:{port}/api/tags"
+            try:
+                req = urllib.request.Request(url, method="GET")
+                with urllib.request.urlopen(req, timeout=1) as response:
+                    if response.status == 200:
+                        print(f"✅ Found active Ollama server on port {port}")
+                        return f"http://127.0.0.1:{port}/api/generate"
+            except Exception:
+                continue
+        return "http://127.0.0.1:11434/api/generate"
 
     def generate_response(self, user_message, system_prompt=""):
+        if not self.api_url:
+            self.api_url = self._find_active_port()
+
         full_prompt = f"{system_prompt}\n\nUser: {user_message}\nRuby:" if system_prompt else f"User: {user_message}\nRuby:"
         
         payload = {
@@ -85,7 +101,7 @@ class LocalBrain:
             method="POST"
         )
         
-        print(f"🔄 Requesting local inference from Ollama API...")
+        print(f"🔄 Requesting local inference from {self.api_url}...")
         try:
             with urllib.request.urlopen(req, timeout=60) as response:
                 result = json.loads(response.read().decode("utf-8"))
@@ -95,13 +111,15 @@ class LocalBrain:
                 return "Hmm, I don't know what to say."
         except urllib.error.URLError as e:
             print(f"⚠️ Ollama connection error: {e.reason}")
+            self.api_url = None
             return "I'm having a slow brain day. Ask again?"
         except Exception as e:
             print(f"⚠️ LLM error: {e}")
+            self.api_url = None
             return "I'm having a slow brain day. Ask again?"
 
 # ============================================
-# PINECONE (optional – read from environment)
+# PINECONE (Cloud vector store integration)
 # ============================================
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_HOST = os.getenv("PINECONE_INDEX_HOST")
@@ -120,7 +138,7 @@ HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 # ============================================
 # INITIALISE CORE
 # ============================================
-brain_core = LocalBrain()  # uses Ollama HTTP API
+brain_core = LocalBrain()
 
 router = BrainRouter(brain_core=brain_core)
 
@@ -326,7 +344,6 @@ def main_app_ui(page: ft.Page):
     chat_list = ft.ListView(expand=True, spacing=12, auto_scroll=True)
     chat_list_ref = chat_list
 
-    # Load history
     conversation_history = load_chat_history()
     for msg in conversation_history:
         sender_name = "Addie" if msg["role"] == "user" else "Ruby"
@@ -418,5 +435,5 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    print("\n🌹 RUBY APP STARTING (Offline + HTTP Ollama)")
+    print("\n🌹 RUBY APP STARTING (Offline + Dynamic Port Ollama + Pinecone)")
     ft.app(target=main_app_ui, view=ft.AppView.WEB_BROWSER)
