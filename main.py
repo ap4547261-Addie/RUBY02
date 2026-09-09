@@ -98,9 +98,9 @@ HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 # ============================================
 # INITIALISE CORE (using LocalBrain instead of RubyBrainCore)
 # ============================================
-router = BrainRouter(brain_core=LocalBrain())   # pass the brain
+brain_core = LocalBrain()  # our local Ollama brain
 
-brain_core = LocalBrain()  # for consistency
+router = BrainRouter(brain_core=brain_core)   # pass the brain
 
 hybrid_memory = HybridMemorySystem(
     sqlite_path=MEMORY_DB,
