@@ -1,5 +1,5 @@
 # main.py - OFFLINE with Pinecone, Knowledge Gatherer, and full UI
-# MODIFIED: Uses local Ollama instead of Gemini.
+# MODIFIED: Uses tinyllama (lightweight) instead of heavy phi3.
 
 import sys
 import os
@@ -7,12 +7,12 @@ import traceback
 import json
 import asyncio
 import threading
-import subprocess          # <-- added for Ollama
+import subprocess
 import flet as ft
 from datetime import datetime
 
 # ============================================
-# CRASH LOGGING (unchanged)
+# CRASH LOGGING
 # ============================================
 CRASH_LOG_PATH = os.path.join(os.getenv("FLET_APP_STORAGE_DATA", "."), "ruby_crash.txt")
 
@@ -43,7 +43,7 @@ sys.excepthook = log_crash
 # IMPORTS
 # ============================================
 from engine.router import BrainRouter
-# from engine.brain import RubyBrainCore   # <-- removed (no longer needed)
+# from engine.brain import RubyBrainCore   # <-- removed
 from engine.vector_store import HybridMemorySystem
 from engine.engine import RubyEngine
 from tools.browser import BrowserToolServer
@@ -61,19 +61,29 @@ from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 from tools.knowledge_gatherer import KnowledgeGatherer
 
 # ============================================
-# LOCALBRAIN CLASS (new)
+# LOCALBRAIN CLASS – uses tinyllama (lightweight)
 # ============================================
 class LocalBrain:
-    """Offline brain using Ollama."""
-    def __init__(self, model="phi3:3.8b-mini-4k-instruct-q4_K_M"):
+    """Offline brain using tinyllama (fits 1 GB RAM)."""
+    def __init__(self, model="tinyllama"):
         self.model = model
 
     def generate_response(self, user_message, system_prompt=""):
         full_prompt = system_prompt + f"\nUser: {user_message}\nRuby:"
         try:
             cmd = ["ollama", "run", self.model, full_prompt]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            return result.stdout.strip()
+            print(f"🔄 Running: {' '.join(cmd)}")  # debug
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+            output = result.stdout.strip()
+            if output:
+                print(f"✅ Ollama reply: {output[:50]}...")
+                return output
+            else:
+                print("⚠️ Empty response from Ollama")
+                return "Hmm, I don't know what to say."
+        except subprocess.TimeoutExpired:
+            print("⏱️ Ollama timeout (90s)")
+            return "I'm thinking too slow... ask again?"
         except Exception as e:
             print(f"⚠️ LLM error: {e}")
             return "I'm having a slow brain day. Ask again?"
@@ -96,11 +106,11 @@ KNOWLEDGE_DB = os.path.join(STORAGE_DIR, "ruby_knowledge.db")
 HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 
 # ============================================
-# INITIALISE CORE (using LocalBrain instead of RubyBrainCore)
+# INITIALISE CORE
 # ============================================
-brain_core = LocalBrain()  # our local Ollama brain
+brain_core = LocalBrain()  # now uses tinyllama
 
-router = BrainRouter(brain_core=brain_core)   # pass the brain
+router = BrainRouter(brain_core=brain_core)
 
 hybrid_memory = HybridMemorySystem(
     sqlite_path=MEMORY_DB,
@@ -202,7 +212,7 @@ conversation_history = load_chat_history()
 print(f"📜 Loaded {len(conversation_history)} chat messages")
 
 # ============================================
-# PERSONALITY PROMPT (unchanged)
+# PERSONALITY PROMPT
 # ============================================
 def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
     today = datetime.now()
@@ -242,7 +252,7 @@ def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
 RUBY_PROMPT = build_ruby_prompt(0)
 
 # ============================================
-# UI (unchanged)
+# UI
 # ============================================
 ui_page_ref = None
 chat_list_ref = None
@@ -396,5 +406,6 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    print("\n🌹 RUBY APP STARTING (Offline + Ollama)")
-    ft.app(target=main_app_ui)
+    print("\n🌹 RUBY APP STARTING (Offline + tinyllama)")
+    # Use web view to avoid permission issues on Android
+    ft.app(target=main_app_ui, view=ft.AppView.WEB_BROWSER)
