@@ -1,4 +1,4 @@
-# inject_all.py – Universal training data injector (FIXED & ROBUST)
+# inject_all.py – Universal training data injector (FIXED for ChatGPT mapping)
 import os
 import json
 import sqlite3
@@ -99,7 +99,7 @@ def parse_file(file_path):
         if convo:
             return convo
 
-    # ChatGPT format (object with "conversations" key)
+    # ChatGPT format (old format with "conversations" key)
     if "conversations" in data and isinstance(data["conversations"], list):
         convo = ""
         for conv in data["conversations"]:
@@ -111,7 +111,7 @@ def parse_file(file_path):
         if convo:
             return convo
 
-    # Generic fallback (for other formats)
+    # Generic fallback
     for key in ["messages", "conversation", "chat", "items"]:
         if key in data and isinstance(data[key], list):
             convo = ""
@@ -123,7 +123,7 @@ def parse_file(file_path):
             if convo:
                 return convo
 
-    # ---- ChatGPT export as a list of conversations ----
+    # ---- ChatGPT export as a list of conversations (old list format) ----
     if isinstance(data, list):
         convo = ""
         for conv in data:
@@ -138,13 +138,28 @@ def parse_file(file_path):
         if convo:
             return convo
 
+    # ---- ChatGPT export with 'mapping' (new format) ----
+    if isinstance(data, list) and len(data) > 0 and "mapping" in data[0]:
+        convo = ""
+        for conv in data:
+            mapping = conv.get("mapping", {})
+            for node_id, node in mapping.items():
+                message = node.get("message")
+                if message:
+                    author_role = message.get("author", {}).get("role", "unknown")
+                    content_parts = message.get("content", {}).get("parts", [])
+                    if content_parts:
+                        content_text = " ".join(content_parts)
+                        convo += f"{author_role}: {content_text}\n"
+        if convo:
+            return convo
+
     return ""
 
 # ============================================
 # 5. Q&A GENERATION (with Gemini OR fallback)
 # ============================================
 def generate_qa_pairs(conversation_text):
-    # If Gemini is available, use it
     if genai and model:
         try:
             prompt = f"""
@@ -162,7 +177,6 @@ Conversation:
         except Exception as e:
             print(f"⚠️ Gemini API error: {e}. Using fallback.")
 
-    # Fallback: Simple keyword extraction
     print("🔄 Using fallback Q&A generation (no Gemini)")
     sentences = [s.strip() for s in conversation_text.split('.') if s.strip()]
     qa_pairs = []
