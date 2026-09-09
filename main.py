@@ -69,17 +69,20 @@ class LocalBrain:
         self.api_url = None
 
     def _find_active_port(self):
-        ports_to_check = [11434, 33779, 41705, 8080, 11435]
+        ports_to_check = [11434, 33779, 41705, 8080, 11435, 50000, 50001]
+        print("🔍 Scanning for active Ollama server ports...")
         for port in ports_to_check:
             url = f"http://127.0.0.1:{port}/api/tags"
             try:
                 req = urllib.request.Request(url, method="GET")
-                with urllib.request.urlopen(req, timeout=1) as response:
+                with urllib.request.urlopen(req, timeout=1.5) as response:
                     if response.status == 200:
                         print(f"✅ Found active Ollama server on port {port}")
                         return f"http://127.0.0.1:{port}/api/generate"
-            except Exception:
+            except Exception as e:
+                print(f"❌ Port {port} check failed: {e}")
                 continue
+        print("⚠️ No scanned port responded, defaulting to 11434")
         return "http://127.0.0.1:11434/api/generate"
 
     def generate_response(self, user_message, system_prompt=""):
@@ -117,7 +120,7 @@ class LocalBrain:
             print(f"⚠️ LLM error: {e}")
             self.api_url = None
             return "I'm having a slow brain day. Ask again?"
-
+    
 # ============================================
 # PINECONE (Cloud vector store integration)
 # ============================================
