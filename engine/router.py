@@ -167,11 +167,12 @@ class RubySleepScheduler:
 
 
 class BrainRouter:
-    def __init__(self, cloud_api_key=None, local_model_path=None, user_id="default_user"):
+    def __init__(self, cloud_api_key=None, local_model_path=None, user_id="default_user", brain_core=None):
         self.sleep_scheduler = RubySleepScheduler()
         self.local_model_path = local_model_path
         self.profile = ConversationProfile()
         self.user_id = user_id
+        self.brain_core = brain_core   # <-- store the brain
 
     def _call_local_brain(self, messages, context=None):
         try:
@@ -217,31 +218,38 @@ class BrainRouter:
         # 1. Check daily sleep schedule (midnight window)
         if self.sleep_scheduler.is_sleeping:
             self.sleep_scheduler.check_wake_up()
-            # If still sleeping, return sleep response
             if self.sleep_scheduler.is_sleeping:
                 status = self.sleep_scheduler.get_status()
                 return {"source": "sleeping", "response": status["message"]}
 
-        # 2. If not sleeping, check if it's time for midnight sleep
         if self.sleep_scheduler.should_sleep_now():
             self.sleep_scheduler.start_daily_sleep()
-            # Return sleep response (will wake later)
             status = self.sleep_scheduler.get_status()
             return {"source": "sleeping", "response": status["message"]}
 
-        # 3. Process message normally
-        last_user_msg = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                last_user_msg = msg.get("content", "")
-                break
-
-        # Try local brain
+        # 2. Try local memory (SQLite Q&A)
         local_answer = self._call_local_brain(messages)
         if local_answer is not None:
             return {"source": "local_brain", "response": local_answer}
 
-        # If no answer, trigger learning (YouTube/Web)
+        # 3. Use local LLM (Ollama) if available
+        if self.brain_core:
+            last_user_msg = None
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    last_user_msg = msg.get("content", "")
+                    break
+            if last_user_msg:
+                try:
+                    # personality may be passed from UI; if not, use a default
+                    sys_prompt = personality or "You are Ruby, a sassy, emotional girl with orange hair."
+                    response = self.brain_core.generate_response(last_user_msg, system_prompt=sys_prompt)
+                    if response:
+                        return {"source": "local_llm", "response": response}
+                except Exception as e:
+                    print(f"LLM generation error: {e}")
+
+        # 4. Fallback: try learning from web/video (background)
         if last_user_msg:
             try:
                 from main import video_learner
@@ -260,19 +268,8 @@ class BrainRouter:
             except:
                 pass
 
-        # Fallback: ask a previous question
-        try:
-            from main import hybrid_memory
-            questions = hybrid_memory.get_memories_by_category("user_questions")
-            if questions:
-                question = random.choice(questions)
-                if question.startswith("User asked: "):
-                    question = question[len("User asked: "):]
-                return {"source": "fallback", "response": question}
-        except:
-            pass
-
-        return {"source": "fallback", "response": "I'm not sure about that yet, but I'll learn."}
+        # 5. Ultimate fallback
+        return {"source": "fallback", "response": "I don't know yet, but I'm learning. Ask me something else?"}
 
     def get_energy_status(self):
         """Keep for compatibility with UI (now returns sleep status)"""
