@@ -172,7 +172,7 @@ class BrainRouter:
         self.local_model_path = local_model_path
         self.profile = ConversationProfile()
         self.user_id = user_id
-        self.brain_core = brain_core   # <-- store the brain
+        self.brain_core = brain_core   # store the brain
 
     def _call_local_brain(self, messages, context=None):
         try:
