@@ -149,7 +149,7 @@ def parse_json_file(filepath):
         return []
 
     # Split into paragraphs / sentences
-    # Simple: split by newline or period, but keep chunks of ~500 words
+    # Simple: split by newline or period, but keep chunks of ~300 words
     chunks = []
     current = []
     word_count = 0
