@@ -39,7 +39,7 @@ print(f"📁 Database path: {DB_PATH}")
 print(f"📂 Training data folder: {DATA_FOLDER}")
 
 # ============================================
-# 2. GEMINI SETUP (OPTIONAL - with fallback)
+# 2. GEMINI SETUP (OPTIONAL)
 # ============================================
 API_KEY = os.getenv("GEMINI_API_KEY")
 genai = None
@@ -78,7 +78,7 @@ def is_blocked(text):
     return False
 
 # ============================================
-# 4. FILE PARSING (supports multiple formats)
+# 4. FILE PARSING (SUPPORTS ALL FORMATS)
 # ============================================
 def parse_file(file_path):
     try:
@@ -87,56 +87,6 @@ def parse_file(file_path):
     except Exception as e:
         print(f"❌ Failed to parse {file_path}: {e}")
         return ""
-
-    # Instagram format
-    if "messages" in data and isinstance(data["messages"], list):
-        convo = ""
-        for msg in data["messages"]:
-            sender = msg.get("sender_name", "Unknown")
-            content = msg.get("content", "")
-            if content:
-                convo += f"{sender}: {content}\n"
-        if convo:
-            return convo
-
-    # ChatGPT format (old format with "conversations" key)
-    if "conversations" in data and isinstance(data["conversations"], list):
-        convo = ""
-        for conv in data["conversations"]:
-            for msg in conv.get("messages", []):
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")
-                if content:
-                    convo += f"{role}: {content}\n"
-        if convo:
-            return convo
-
-    # Generic fallback
-    for key in ["messages", "conversation", "chat", "items"]:
-        if key in data and isinstance(data[key], list):
-            convo = ""
-            for item in data[key]:
-                sender = item.get("sender_name") or item.get("role") or item.get("from") or "Unknown"
-                text = item.get("content") or item.get("text") or item.get("message") or ""
-                if text:
-                    convo += f"{sender}: {text}\n"
-            if convo:
-                return convo
-
-    # ---- ChatGPT export as a list of conversations (old list format) ----
-    if isinstance(data, list):
-        convo = ""
-        for conv in data:
-            messages = conv.get("messages", [])
-            if not messages:
-                continue
-            for msg in messages:
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")
-                if content:
-                    convo += f"{role}: {content}\n"
-        if convo:
-            return convo
 
     # ---- ChatGPT export with 'mapping' (new format) ----
     if isinstance(data, list) and len(data) > 0 and "mapping" in data[0]:
@@ -149,15 +99,57 @@ def parse_file(file_path):
                     author_role = message.get("author", {}).get("role", "unknown")
                     content_parts = message.get("content", {}).get("parts", [])
                     if content_parts:
-                        content_text = " ".join(content_parts)
+                        # Extract text from parts (which may be dicts with 'text' field)
+                        texts = []
+                        for part in content_parts:
+                            if isinstance(part, dict):
+                                texts.append(part.get("text", ""))
+                            else:
+                                texts.append(str(part))
+                        content_text = " ".join(texts)
                         convo += f"{author_role}: {content_text}\n"
         if convo:
             return convo
 
+    # ---- Instagram format ----
+    if "messages" in data and isinstance(data["messages"], list):
+        convo = ""
+        for msg in data["messages"]:
+            sender = msg.get("sender_name", "Unknown")
+            content = msg.get("content", "")
+            if content:
+                convo += f"{sender}: {content}\n"
+        if convo:
+            return convo
+
+    # ---- ChatGPT format (old, with "conversations" key) ----
+    if "conversations" in data and isinstance(data["conversations"], list):
+        convo = ""
+        for conv in data["conversations"]:
+            for msg in conv.get("messages", []):
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                if content:
+                    convo += f"{role}: {content}\n"
+        if convo:
+            return convo
+
+    # ---- Generic fallback ----
+    for key in ["messages", "conversation", "chat", "items"]:
+        if key in data and isinstance(data[key], list):
+            convo = ""
+            for item in data[key]:
+                sender = item.get("sender_name") or item.get("role") or item.get("from") or "Unknown"
+                text = item.get("content") or item.get("text") or item.get("message") or ""
+                if text:
+                    convo += f"{sender}: {text}\n"
+            if convo:
+                return convo
+
     return ""
 
 # ============================================
-# 5. Q&A GENERATION (with Gemini OR fallback)
+# 5. Q&A GENERATION (Gemini or fallback)
 # ============================================
 def generate_qa_pairs(conversation_text):
     if genai and model:
