@@ -1,5 +1,5 @@
 # main.py - OFFLINE with Pinecone, Knowledge Gatherer, and full UI
-# MODIFIED: Uses tinyllama (lightweight) instead of heavy phi3.
+# MODIFIED: Uses tinyllama via Ollama HTTP API (robust local inference)
 
 import sys
 import os
@@ -8,6 +8,8 @@ import json
 import asyncio
 import threading
 import subprocess
+import urllib.request
+import urllib.error
 import flet as ft
 from datetime import datetime
 
@@ -43,7 +45,6 @@ sys.excepthook = log_crash
 # IMPORTS
 # ============================================
 from engine.router import BrainRouter
-# from engine.brain import RubyBrainCore   # <-- removed
 from engine.vector_store import HybridMemorySystem
 from engine.engine import RubyEngine
 from tools.browser import BrowserToolServer
@@ -61,33 +62,44 @@ from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 from tools.knowledge_gatherer import KnowledgeGatherer
 
 # ============================================
-# LOCALBRAIN CLASS – uses tinyllama (lightweight)
+# LOCALBRAIN CLASS – uses Ollama HTTP API
 # ============================================
 class LocalBrain:
     def __init__(self, model="tinyllama"):
         self.model = model
-        self.ollama_path = "/data/data/com.termux/files/usr/bin/ollama"
+        self.api_url = "http://127.0.0.1:11434/api/generate"
 
     def generate_response(self, user_message, system_prompt=""):
-        full_prompt = system_prompt + f"\nUser: {user_message}\nRuby:"
-        env = os.environ.copy()
-        env["OLLAMA_HOST"] = "http://127.0.0.1:11434"
-        cmd = [self.ollama_path, "run", self.model, full_prompt]
-        print(f"🔄 Running: {' '.join(cmd)}")
+        full_prompt = f"{system_prompt}\n\nUser: {user_message}\nRuby:" if system_prompt else f"User: {user_message}\nRuby:"
+        
+        payload = {
+            "model": self.model,
+            "prompt": full_prompt,
+            "stream": False
+        }
+        
+        req = urllib.request.Request(
+            self.api_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        
+        print(f"🔄 Requesting local inference from Ollama API...")
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=90, env=env)
-            print(f"🔍 Return code: {result.returncode}")
-            print(f"🔍 STDOUT: {result.stdout}")
-            print(f"🔍 STDERR: {result.stderr}")
-            if result.stdout.strip():
-                return result.stdout.strip()
-            else:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                result = json.loads(response.read().decode("utf-8"))
+                output = result.get("response", "").strip()
+                if output:
+                    return output
                 return "Hmm, I don't know what to say."
-        except subprocess.TimeoutExpired:
-            return "I'm thinking too slow... ask again?"
+        except urllib.error.URLError as e:
+            print(f"⚠️ Ollama connection error: {e.reason}")
+            return "I'm having a slow brain day. Ask again?"
         except Exception as e:
             print(f"⚠️ LLM error: {e}")
             return "I'm having a slow brain day. Ask again?"
+
 # ============================================
 # PINECONE (optional – read from environment)
 # ============================================
@@ -108,7 +120,7 @@ HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 # ============================================
 # INITIALISE CORE
 # ============================================
-brain_core = LocalBrain()  # now uses tinyllama
+brain_core = LocalBrain()  # uses Ollama HTTP API
 
 router = BrainRouter(brain_core=brain_core)
 
@@ -406,6 +418,5 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    print("\n🌹 RUBY APP STARTING (Offline + tinyllama)")
-    # Use web view to avoid permission issues on Android
+    print("\n🌹 RUBY APP STARTING (Offline + HTTP Ollama)")
     ft.app(target=main_app_ui, view=ft.AppView.WEB_BROWSER)
