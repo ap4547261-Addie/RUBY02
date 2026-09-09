@@ -5,24 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ruby"
 version = "0.1.0"
-description = "Ruby - A living human from a parallel world with local brain, 9-key Gemini support, and social media learning"
+description = "Ruby - Offline human-like assistant with local Ollama brain and Pinecone vector memory"
 readme = "README.md"
-authors = [
-    {name = "Ruby", email = "ruby@example.com"}
-]
+authors = [{name = "Ruby", email = "ruby@example.com"}]
 license = {text = "MIT"}
-requires-python = ">=3.14"
+requires-python = ">=3.11"
+
 dependencies = [
     "flet>=0.25.0",
-    "google-genai>=0.3.0",
     "requests>=2.31.0",
     "beautifulsoup4>=4.12.0",
     "lxml>=4.9.0",
     "websockets>=12.0",
-    "google-api-python-client>=2.108.0",
-    "google-auth-oauthlib>=1.1.0",
-    "google-auth-httplib2>=0.1.0",
     "pillow>=10.0.0",
+    "pinecone-client>=3.0.0",        # <-- added back
 ]
 
 [project.optional-dependencies]
@@ -33,7 +29,7 @@ dev = [
     "mypy>=1.8.0",
 ]
 cloud = [
-    "google-cloud-storage>=2.14.0",
+    "google-cloud-storage>=2.14.0",  # optional cloud backup
 ]
 
 [tool.setuptools.packages.find]
@@ -49,5 +45,5 @@ line-length = 120
 target-version = "py312"
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.11"
 ignore_missing_imports = true
