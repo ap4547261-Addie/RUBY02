@@ -43,7 +43,7 @@ sys.excepthook = log_crash
 # IMPORTS
 # ============================================
 from engine.router import BrainRouter
-from engine.brain import RubyBrainCore
+# from engine.brain import RubyBrainCore   # <-- removed (no longer needed)
 from engine.vector_store import HybridMemorySystem
 from engine.engine import RubyEngine
 from tools.browser import BrowserToolServer
@@ -79,7 +79,7 @@ class LocalBrain:
             return "I'm having a slow brain day. Ask again?"
 
 # ============================================
-# PINECONE (optional, not used if no key)
+# PINECONE (optional – read from environment)
 # ============================================
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_HOST = os.getenv("PINECONE_INDEX_HOST")
@@ -242,7 +242,7 @@ def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
 RUBY_PROMPT = build_ruby_prompt(0)
 
 # ============================================
-# UI (unchanged except send_message now handles LocalBrain responses)
+# UI (unchanged)
 # ============================================
 ui_page_ref = None
 chat_list_ref = None
