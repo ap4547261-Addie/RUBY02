@@ -64,35 +64,30 @@ from tools.knowledge_gatherer import KnowledgeGatherer
 # LOCALBRAIN CLASS – uses tinyllama (lightweight)
 # ============================================
 class LocalBrain:
-    """Offline brain using tinyllama (fits 1 GB RAM)."""
     def __init__(self, model="tinyllama"):
         self.model = model
-        # Use full path to ollama
         self.ollama_path = "/data/data/com.termux/files/usr/bin/ollama"
 
     def generate_response(self, user_message, system_prompt=""):
         full_prompt = system_prompt + f"\nUser: {user_message}\nRuby:"
-        # Set environment so subprocess knows where Ollama is
         env = os.environ.copy()
         env["OLLAMA_HOST"] = "http://127.0.0.1:11434"
+        cmd = [self.ollama_path, "run", self.model, full_prompt]
+        print(f"🔄 Running: {' '.join(cmd)}")
         try:
-            cmd = [self.ollama_path, "run", self.model, full_prompt]
-            print(f"🔄 Running: {' '.join(cmd)}")  # debug
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=90, env=env)
-            output = result.stdout.strip()
-            if output:
-                print(f"✅ Ollama reply: {output[:50]}...")
-                return output
+            print(f"🔍 Return code: {result.returncode}")
+            print(f"🔍 STDOUT: {result.stdout}")
+            print(f"🔍 STDERR: {result.stderr}")
+            if result.stdout.strip():
+                return result.stdout.strip()
             else:
-                print("⚠️ Empty response from Ollama")
                 return "Hmm, I don't know what to say."
         except subprocess.TimeoutExpired:
-            print("⏱️ Ollama timeout (90s)")
             return "I'm thinking too slow... ask again?"
         except Exception as e:
             print(f"⚠️ LLM error: {e}")
             return "I'm having a slow brain day. Ask again?"
-
 # ============================================
 # PINECONE (optional – read from environment)
 # ============================================
