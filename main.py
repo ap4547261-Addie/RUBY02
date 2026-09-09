@@ -67,7 +67,7 @@ from tools.knowledge_gatherer import KnowledgeGatherer
 class LocalBrain:
     def __init__(self, model="tinyllama"):
         self.model = model
-        self.api_url = "http://127.0.0.1:11434/api/generate"
+        self.api_url = "http://127.0.0.1:33779/api/generate"
 
     def generate_response(self, user_message, system_prompt=""):
         full_prompt = f"{system_prompt}\n\nUser: {user_message}\nRuby:" if system_prompt else f"User: {user_message}\nRuby:"
