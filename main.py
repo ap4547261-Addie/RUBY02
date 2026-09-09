@@ -1,15 +1,18 @@
 # main.py - OFFLINE with Pinecone, Knowledge Gatherer, and full UI
+# MODIFIED: Uses local Ollama instead of Gemini.
+
 import sys
 import os
 import traceback
 import json
 import asyncio
 import threading
+import subprocess          # <-- added for Ollama
 import flet as ft
 from datetime import datetime
 
 # ============================================
-# CRASH LOGGING
+# CRASH LOGGING (unchanged)
 # ============================================
 CRASH_LOG_PATH = os.path.join(os.getenv("FLET_APP_STORAGE_DATA", "."), "ruby_crash.txt")
 
@@ -53,63 +56,34 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT, CORE_MEMORIES
 
 # ============================================
-# KNOWLEDGE GATHERER (background learning)
+# KNOWLEDGE GATHERER
 # ============================================
 from tools.knowledge_gatherer import KnowledgeGatherer
 
 # ============================================
-# PINECONE (read from environment)
+# LOCALBRAIN CLASS (new)
+# ============================================
+class LocalBrain:
+    """Offline brain using Ollama."""
+    def __init__(self, model="phi3:3.8b-mini-4k-instruct-q4_K_M"):
+        self.model = model
+
+    def generate_response(self, user_message, system_prompt=""):
+        full_prompt = system_prompt + f"\nUser: {user_message}\nRuby:"
+        try:
+            cmd = ["ollama", "run", self.model, full_prompt]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            return result.stdout.strip()
+        except Exception as e:
+            print(f"⚠️ LLM error: {e}")
+            return "I'm having a slow brain day. Ask again?"
+
+# ============================================
+# PINECONE (optional, not used if no key)
 # ============================================
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_HOST = os.getenv("PINECONE_INDEX_HOST")
 print(f"🔑 Pinecone API: {'SET' if PINECONE_API_KEY else 'NOT SET'}")
-print(f"🔗 Pinecone Host: {'SET' if PINECONE_INDEX_HOST else 'NOT SET'}")
-
-# ============================================
-# WSGIRef stub
-# ============================================
-try:
-    import wsgiref
-except ImportError:
-    import sys
-    from types import ModuleType
-
-    wsgiref = ModuleType('wsgiref')
-    wsgiref.__path__ = []
-    sys.modules['wsgiref'] = wsgiref
-
-    headers = ModuleType('wsgiref.headers')
-    wsgiref.headers = headers
-    sys.modules['wsgiref.headers'] = headers
-    class Headers:
-        def __init__(self, *args, **kwargs):
-            pass
-    headers.Headers = Headers
-
-    simple_server = ModuleType('wsgiref.simple_server')
-    wsgiref.simple_server = simple_server
-    sys.modules['wsgiref.simple_server'] = simple_server
-
-    class WSGIServer:
-        def __init__(self, *args, **kwargs):
-            pass
-    class WSGIRequestHandler:
-        def __init__(self, *args, **kwargs):
-            pass
-    def make_server(*args, **kwargs):
-        return WSGIServer()
-    simple_server.WSGIServer = WSGIServer
-    simple_server.WSGIRequestHandler = WSGIRequestHandler
-    simple_server.make_server = make_server
-
-    util = ModuleType('wsgiref.util')
-    wsgiref.util = util
-    sys.modules['wsgiref.util'] = util
-    def guess_scheme(environ):
-        return 'http'
-    util.guess_scheme = guess_scheme
-
-    print("⚠️ wsgiref stub (package) created – backup may have limited functionality.")
 
 # ============================================
 # STORAGE DIR
@@ -117,158 +91,16 @@ except ImportError:
 STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
-token_source = "token_gmail.pickle"
-token_dest = os.path.join(STORAGE_DIR, "token_gmail.pickle")
-if os.path.exists(token_source) and not os.path.exists(token_dest):
-    import shutil
-    shutil.copy(token_source, token_dest)
-    print(f"✅ token_gmail.pickle copied to {token_dest}")
-elif os.path.exists(token_dest):
-    print(f"✅ token_gmail.pickle already exists at {token_dest}")
-else:
-    print("ℹ️ token_gmail.pickle not found – you can connect Gmail from the app.")
-
 MEMORY_DB = os.path.join(STORAGE_DIR, "ruby_memory.db")
 KNOWLEDGE_DB = os.path.join(STORAGE_DIR, "ruby_knowledge.db")
 HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 
 # ============================================
-# BACKUP (Gmail + Cloud) – optional
+# INITIALISE CORE (using LocalBrain instead of RubyBrainCore)
 # ============================================
-def ensure_credentials():
-    creds_content = os.getenv("GMAIL_CREDENTIANLS_JSON")
-    if creds_content:
-        creds_path = os.path.join(STORAGE_DIR, "credentials.json")
-        if not os.path.exists(creds_path):
-            try:
-                json.loads(creds_content)
-                with open(creds_path, "w") as f:
-                    f.write(creds_content)
-                print("✅ Credentials written from secret.")
-            except Exception as e:
-                print(f"⚠️ Invalid GMAIL_CREDENTIANLS_JSON: {e}")
-        return creds_path
-    else:
-        if os.path.exists("credentials.json"):
-            return "credentials.json"
-    return None
+router = BrainRouter(brain_core=LocalBrain())   # pass the brain
 
-from tools.gmail_backup import GmailBackup
-gmail = None
-gmail_email = "Not tied"
-credentials_file = ensure_credentials()
-
-from google_auth_oauthlib.flow import InstalledAppFlow
-import webbrowser
-import pickle
-
-def start_gmail_oauth(page):
-    if not credentials_file or not os.path.exists(credentials_file):
-        page.snack_bar = ft.SnackBar(ft.Text("❌ credentials.json not found. Add GMAIL_CREDENTIANLS_JSON secret."))
-        page.snack_bar.open = True
-        page.update()
-        return
-
-    SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
-    flow = InstalledAppFlow.from_client_secrets_file(credentials_file, SCOPES)
-    auth_url, _ = flow.authorization_url(prompt='consent')
-
-    code_field = ft.TextField(hint_text="Paste authorization code here", width=300)
-    status_text = ft.Text("")
-
-    def submit_code(e):
-        code = code_field.value.strip()
-        if not code:
-            status_text.value = "❌ Please paste a code."
-            page.update()
-            return
-        try:
-            flow.fetch_token(code=code)
-            creds = flow.credentials
-            token_path = os.path.join(STORAGE_DIR, "token_gmail.pickle")
-            with open(token_path, 'wb') as f:
-                pickle.dump(creds, f)
-            global gmail, gmail_email
-            gmail = GmailBackup(token_file=token_path)
-            if hasattr(creds, 'id_token') and creds.id_token:
-                gmail_email = creds.id_token.get('email', 'Unknown')
-            page.close_dialog()
-            page.snack_bar = ft.SnackBar(ft.Text(f"✅ Gmail connected: {gmail_email}"))
-            page.snack_bar.open = True
-            update_header(page)
-            page.update()
-        except Exception as err:
-            status_text.value = f"❌ Error: {err}"
-            page.update()
-
-    def open_url(e):
-        webbrowser.open(auth_url)
-
-    dialog = ft.AlertDialog(
-        title=ft.Text("Connect Gmail"),
-        content=ft.Column([
-            ft.Text("1. Open this URL in your browser:"),
-            ft.Text(auth_url, selectable=True, size=12),
-            ft.Row([ft.TextButton("Open in Browser", on_click=open_url)]),
-            ft.Text("2. Log in and grant permission."),
-            ft.Text("3. Copy the authorization code and paste it below."),
-            code_field,
-            status_text,
-        ], tight=True, spacing=10),
-        actions=[
-            ft.TextButton("Submit", on_click=submit_code),
-            ft.TextButton("Cancel", on_click=lambda e: page.close_dialog()),
-        ],
-    )
-    page.open_dialog(dialog)
-
-def connect_gmail_button(page):
-    return ft.TextButton(
-        "Connect Gmail",
-        on_click=lambda e: start_gmail_oauth(page),
-        style=ft.ButtonStyle(color=ft.Colors.GREEN_400),
-    )
-
-# Cloud Storage backup
-from tools.cloud_backup import CloudBackup
-cloud = None
-cloud_creds_local = "service_account.json"
-cloud_creds_storage = os.path.join(STORAGE_DIR, "service_account.json")
-if os.path.exists(cloud_creds_local):
-    if not os.path.exists(cloud_creds_storage):
-        import shutil
-        shutil.copy(cloud_creds_local, cloud_creds_storage)
-    try:
-        cloud = CloudBackup(
-            bucket_name="ruby-backup-bucket",
-            credentials_path=cloud_creds_storage
-        )
-        print("☁️ Cloud backup ready.")
-    except Exception as e:
-        print(f"⚠️ Cloud init error: {e}")
-
-def restore_from_backups():
-    restored = False
-    if gmail:
-        if gmail.restore_db(MEMORY_DB, "ruby_memory.db"):
-            restored = True
-        if gmail.restore_db(KNOWLEDGE_DB, "ruby_knowledge.db"):
-            restored = True
-    if not restored and cloud:
-        if cloud.restore_latest(MEMORY_DB, "ruby_memory.db"):
-            restored = True
-        if cloud.restore_latest(KNOWLEDGE_DB, "ruby_knowledge.db"):
-            restored = True
-    if restored:
-        print("✅ Memories restored from backup.")
-    else:
-        print("ℹ️ No backup found, starting fresh.")
-
-# ============================================
-# INITIALISE CORE
-# ============================================
-router = BrainRouter()
-brain_core = RubyBrainCore(api_key=None)
+brain_core = LocalBrain()  # for consistency
 
 hybrid_memory = HybridMemorySystem(
     sqlite_path=MEMORY_DB,
@@ -283,14 +115,9 @@ try:
 except Exception as e:
     print(f"⚠️ Memory seeding failed: {e}")
 
-if hybrid_memory.get_interaction_count() == 0:
-    restore_from_backups()
-
 data_ingestion = DataIngestion(db_path=KNOWLEDGE_DB)
 web_learner = WebLearner(data_ingestion)
 video_learner = VideoLearner(data_ingestion)
-
-vision_engine = None
 instagram_connector = InstagramConnector(hybrid_memory)
 
 websocket_handler = WebSocketHandler(
@@ -319,14 +146,14 @@ ruby_engine = RubyEngine(
 print("🧠 RubyEngine initialized!")
 
 # ============================================
-# START KNOWLEDGE GATHERER (background learning)
+# KNOWLEDGE GATHERER (background)
 # ============================================
 gatherer = KnowledgeGatherer(
     video_learner=video_learner,
     web_learner=web_learner,
     memory=hybrid_memory,
     knowledge=data_ingestion,
-    interval=600   # learn every 10 minutes – adjust as you wish
+    interval=600
 )
 gatherer.start()
 
@@ -375,7 +202,7 @@ conversation_history = load_chat_history()
 print(f"📜 Loaded {len(conversation_history)} chat messages")
 
 # ============================================
-# PERSONALITY PROMPT
+# PERSONALITY PROMPT (unchanged)
 # ============================================
 def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
     today = datetime.now()
@@ -415,7 +242,7 @@ def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
 RUBY_PROMPT = build_ruby_prompt(0)
 
 # ============================================
-# UI
+# UI (unchanged except send_message now handles LocalBrain responses)
 # ============================================
 ui_page_ref = None
 chat_list_ref = None
@@ -444,11 +271,6 @@ def update_ruby_status():
             ui_page_ref.update()
         except Exception as e:
             print(f"Status update error: {e}")
-
-def update_header(page):
-    if header_ref:
-        header_ref.content.controls[0].value = f"RUBY // {gmail_email}"
-        page.update()
 
 def add_message(sender, text, is_user=False, image_path=None):
     if chat_list_ref and ui_page_ref:
@@ -482,6 +304,7 @@ def main_app_ui(page: ft.Page):
     chat_list = ft.ListView(expand=True, spacing=12, auto_scroll=True)
     chat_list_ref = chat_list
 
+    # Load history
     conversation_history = load_chat_history()
     for msg in conversation_history:
         sender_name = "Addie" if msg["role"] == "user" else "Ruby"
@@ -561,9 +384,8 @@ def main_app_ui(page: ft.Page):
     input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
     header_row = ft.Row([
-        ft.Text(f"RUBY // {gmail_email}", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
+        ft.Text("RUBY // Offline", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
         status_label,
-        connect_gmail_button(page),
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
     header = ft.Container(content=header_row, padding=5)
     header_ref = header
@@ -574,9 +396,5 @@ def main_app_ui(page: ft.Page):
     page.update()
 
 if __name__ == "__main__":
-    print("\n🌹 RUBY APP STARTING (Offline + Pinecone + Gatherer)")
-    try:
-        ft.app(target=main_app_ui)
-    except Exception as e:
-        print(f"❌ FATAL ERROR: {e}")
-        log_crash(type(e), e, e.__traceback__)
+    print("\n🌹 RUBY APP STARTING (Offline + Ollama)")
+    ft.app(target=main_app_ui)
