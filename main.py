@@ -67,15 +67,18 @@ class LocalBrain:
     """Offline brain using tinyllama (fits 1 GB RAM)."""
     def __init__(self, model="tinyllama"):
         self.model = model
+        # Use full path to ollama
+        self.ollama_path = "/data/data/com.termux/files/usr/bin/ollama"
 
     def generate_response(self, user_message, system_prompt=""):
         full_prompt = system_prompt + f"\nUser: {user_message}\nRuby:"
+        # Set environment so subprocess knows where Ollama is
+        env = os.environ.copy()
+        env["OLLAMA_HOST"] = "http://127.0.0.1:11434"
         try:
-            cmd = ["/data/data/com.termux/files/usr/bin/ollama", "run", self.model, full_prompt]
+            cmd = [self.ollama_path, "run", self.model, full_prompt]
             print(f"🔄 Running: {' '.join(cmd)}")  # debug
-            env = os.environ.copy()
-env["OLLAMA_HOST"] = "http://127.0.0.1:11434"
-result = subprocess.run(cmd, capture_output=True, text=True, timeout=90, env=env)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=90, env=env)
             output = result.stdout.strip()
             if output:
                 print(f"✅ Ollama reply: {output[:50]}...")
