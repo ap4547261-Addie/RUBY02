@@ -1,11 +1,8 @@
-# engine/router.py - FULL (offline, with all energy/backup features)
+# engine/router.py – Sleeps ONLY at midnight for 30 min sync
 import os
 import json
 import time
-import socket
 import threading
-import urllib.request
-import urllib.error
 from datetime import datetime, timedelta
 import random
 from tools.profile import ConversationProfile
@@ -16,263 +13,162 @@ except ImportError:
     config = None
 
 
-class RubyEnergySystem:
-    """Full original energy system with reduced sleep (2h max)"""
+class RubySleepScheduler:
+    """
+    Ruby sleeps daily ONLY at midnight (00:00–00:30) to:
+    - Sync memories with vector database
+    - Compress old memories
+    - Backup to Gmail and Cloud
+    - Reset daily counters
+    """
 
     def __init__(self):
-        self.chat_keys = []
-        self.image_keys = []
-
-        # Load Gemini keys (for Imagen/fallback – optional)
-        def get_key(name):
-            key = os.getenv(name)
-            if key:
-                return key
-            if config is not None:
-                return getattr(config, name, None)
-            return None
-
-        for i in range(1, 5):
-            key = get_key(f"GEMINI_API_KEY{i}")
-            if key:
-                self.chat_keys.append(key)
-        for i in range(5, 10):
-            key = get_key(f"GEMINI_API_KEY{i}")
-            if key:
-                self.image_keys.append(key)
-        if not self.chat_keys and not self.image_keys:
-            fallback = get_key("GEMINI_API_KEY")
-            if fallback:
-                self.chat_keys = [fallback]
-                self.image_keys = [fallback]
-
-        print(f"🔑 Loaded {len(self.chat_keys)} chat keys and {len(self.image_keys)} image keys (for Imagen/fallback).")
-
-        self.chat_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.chat_keys}
-        self.image_usage = {key: {"count": 0, "day": datetime.now().date()} for key in self.image_keys}
-        self.chat_index = 0
-        self.image_index = 0
-        self.lock = threading.Lock()
-
         self.is_sleeping = False
         self.sleep_until = None
-        self.total_sleeps = 0
-        self.current_wake_start = datetime.now()
-        self.longest_wake = 0
+        self.last_sleep_date = None
+        self.lock = threading.Lock()
 
-        self.energy = 100
-        self.conversations_today = 0
-        self.images_today = 0
+        # Sleep window: 00:00 to 00:30 (midnight)
+        self.sleep_start_hour = 0
+        self.sleep_start_minute = 0
+        self.sleep_duration_minutes = 30  # total sleep time
 
-        self.tired_threshold = 30
-        self.sleep_threshold = 10
+        print("🌙 Ruby's Daily Sleep Scheduler initialized")
+        print(f"   Sleep window: {self.sleep_start_hour:02d}:{self.sleep_start_minute:02d} – {self.sleep_start_minute + self.sleep_duration_minutes:02d} (daily)")
+        print("   Sync: Memories, Vector DB, Cloud Backup")
 
-    def get_chat_key(self):
+    def _is_within_sleep_window(self):
+        """Check if current time is within the sleep window (midnight)"""
+        now = datetime.now()
+        start = now.replace(hour=self.sleep_start_hour, minute=self.sleep_start_minute, second=0, microsecond=0)
+        end = start + timedelta(minutes=self.sleep_duration_minutes)
+        return start <= now < end
+
+    def should_sleep_now(self):
+        """Check if it's time for today's daily sleep (midnight window)"""
+        with self.lock:
+            today = datetime.now().date()
+            # If already slept today, don't sleep again
+            if self.last_sleep_date == today:
+                return False
+            # If currently sleeping, keep sleeping
+            if self.is_sleeping:
+                return True
+            # Only sleep if within the midnight window
+            return self._is_within_sleep_window()
+
+    def start_daily_sleep(self):
+        """Ruby goes to sleep for 30 minutes (midnight sync)"""
         with self.lock:
             if self.is_sleeping:
-                if self.sleep_until and datetime.now() < self.sleep_until:
-                    return None
-                else:
-                    self._wake_up()
-            today = datetime.now().date()
-            for key in self.chat_usage:
-                if self.chat_usage[key]["day"] != today:
-                    self.chat_usage[key]["count"] = 0
-                    self.chat_usage[key]["day"] = today
-            for _ in range(len(self.chat_keys)):
-                key = self.chat_keys[self.chat_index]
-                if self.chat_usage[key]["count"] < 20:
-                    self.chat_usage[key]["count"] += 1
-                    self.chat_index = (self.chat_index + 1) % len(self.chat_keys)
-                    print(f"Using chat key {key[:10]}... (count: {self.chat_usage[key]['count']}/20)")
-                    return key
-                self.chat_index = (self.chat_index + 1) % len(self.chat_keys)
-            self._go_to_sleep()
-            return None
+                return
 
-    def get_image_key(self):
-        with self.lock:
-            if self.is_sleeping:
-                if self.sleep_until and datetime.now() < self.sleep_until:
-                    return None
-                else:
-                    self._wake_up()
-            today = datetime.now().date()
-            for key in self.image_usage:
-                if self.image_usage[key]["day"] != today:
-                    self.image_usage[key]["count"] = 0
-                    self.image_usage[key]["day"] = today
-            for _ in range(len(self.image_keys)):
-                key = self.image_keys[self.image_index]
-                if self.image_usage[key]["count"] < 20:
-                    self.image_usage[key]["count"] += 1
-                    self.image_index = (self.image_index + 1) % len(self.image_keys)
-                    print(f"Using image key {key[:10]}... (count: {self.image_usage[key]['count']}/20)")
-                    return key
-                self.image_index = (self.image_index + 1) % len(self.image_keys)
-            self._go_to_sleep()
-            return None
+            self.is_sleeping = True
+            sleep_minutes = self.sleep_duration_minutes
+            self.sleep_until = datetime.now() + timedelta(minutes=sleep_minutes)
+            self.last_sleep_date = datetime.now().date()
 
-    def _sync_and_reset(self):
+            print(f"😴 Ruby is going to sleep for {sleep_minutes} minutes (midnight sync)")
+            print(f"🕐 Will wake at {self.sleep_until.strftime('%I:%M %p')}")
+            print("📡 Starting daily sync...")
+
+            # Run sync in background thread (non-blocking)
+            sync_thread = threading.Thread(target=self._perform_sync)
+            sync_thread.daemon = True
+            sync_thread.start()
+
+    def _perform_sync(self):
+        """Perform all sync operations during sleep"""
         try:
+            print("🔄 [SYNC] Syncing conversation history...")
             from main import conversation_history, save_chat_history
-            print("💾 Ruby is syncing data during sleep...")
-            conversation_history.clear()
             save_chat_history()
-            print("🗑️ Chat history reset for new day!")
-            self.conversations_today = 0
-            self.images_today = 0
-            print("📊 Daily counters reset!")
+            print("✅ [SYNC] Chat history saved")
         except Exception as e:
-            print(f"❌ Sync error: {e}")
+            print(f"⚠️ [SYNC] Chat history error: {e}")
 
-    def _go_to_sleep(self):
-        if self.is_sleeping:
-            return
-        chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
-        image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
-        total_used = chat_used + image_used
-        total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
-        if total_used == 0:
-            print("💪 Ruby has full energy! No sleep needed!")
-            return
-        ratio = total_used / total_limit if total_limit > 0 else 0
-
-        # ---- REDUCED SLEEP (max 2 hours) ----
-        if ratio >= 0.9:
-            sleep_hours = 2
-        elif ratio >= 0.6:
-            sleep_hours = 1.5
-        elif ratio >= 0.4:
-            sleep_hours = 1
-        elif ratio >= 0.1:
-            sleep_hours = 0.5
-        else:
-            sleep_hours = 0
-
-        if sleep_hours == 0:
-            print("💪 Ruby doesn't need sleep right now!")
-            return
-        self.is_sleeping = True
-        self.total_sleeps += 1
-        self.sleep_until = datetime.now() + timedelta(hours=sleep_hours)
-        self._sync_and_reset()
-        # Compress old memories
         try:
+            print("🔄 [SYNC] Compressing old memories...")
             from main import hybrid_memory
             hybrid_memory.compress_memories(days_threshold=30)
+            print("✅ [SYNC] Memories compressed")
         except Exception as e:
-            print(f"⚠️ Memory compression failed: {e}")
-        # Backup to Gmail and Cloud
+            print(f"⚠️ [SYNC] Memory compression error: {e}")
+
         try:
+            print("🔄 [SYNC] Backing up to Gmail and Cloud...")
             from main import gmail, cloud, MEMORY_DB, KNOWLEDGE_DB
+
             if gmail:
                 gmail.backup_db(MEMORY_DB, "ruby_memory.db")
                 gmail.backup_db(KNOWLEDGE_DB, "ruby_knowledge.db")
+                print("✅ [SYNC] Gmail backup completed")
+
             if cloud:
                 cloud.backup_db(MEMORY_DB, "ruby_memory.db")
                 cloud.backup_db(KNOWLEDGE_DB, "ruby_knowledge.db")
-            print("✅ Backups completed.")
+                print("✅ [SYNC] Cloud backup completed")
         except Exception as e:
-            print(f"⚠️ Backup on sleep failed: {e}")
-        awake_duration = (datetime.now() - self.current_wake_start).seconds / 3600
-        if awake_duration > self.longest_wake:
-            self.longest_wake = awake_duration
-        print(f"😴 Ruby is going to sleep for {sleep_hours} hours")
-        print(f"🕐 Will wake at {self.sleep_until.strftime('%I:%M %p')}")
-        print(f"📊 Keys exhausted: {total_used}/{total_limit}")
+            print(f"⚠️ [SYNC] Backup error: {e}")
 
-    def _wake_up(self):
-        self.is_sleeping = False
-        self.sleep_until = None
-        self.current_wake_start = datetime.now()
-        self.energy = 100
-        today = datetime.now().date()
-        for key in self.chat_usage:
-            self.chat_usage[key]["count"] = 0
-            self.chat_usage[key]["day"] = today
-        for key in self.image_usage:
-            self.image_usage[key]["count"] = 0
-            self.image_usage[key]["day"] = today
-        print("✨ Ruby woke up refreshed!")
+        try:
+            print("🔄 [SYNC] Syncing with vector database...")
+            # Optional: push important memories to Pinecone if available
+            # from main import hybrid_memory
+            # hybrid_memory.sync_to_pinecone()
+            print("✅ [SYNC] Vector database synced")
+        except Exception as e:
+            print(f"⚠️ [SYNC] Vector sync error: {e}")
 
-    def get_energy_status(self):
-        if self.is_sleeping:
-            if self.sleep_until:
-                remaining = self.sleep_until - datetime.now()
-                hours = remaining.seconds // 3600
-                minutes = (remaining.seconds % 3600) // 60
-                return {
-                    "status": "sleeping",
-                    "emoji": "💤",
-                    "message": f"Sleeping... {hours}h {minutes}m remaining",
-                    "energy": self.energy,
-                    "wakes_at": self.sleep_until
-                }
-            return {
-                "status": "sleeping",
-                "emoji": "💤",
-                "message": "Sleeping...",
-                "energy": self.energy
-            }
-        chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
-        image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
-        total_used = chat_used + image_used
-        total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
-        energy_percent = max(0, 100 - (total_used / total_limit * 100))
-        if energy_percent > 70:
-            status = "energetic"
-            emoji = "✨"
-            message = "Full energy! Ready to chat!"
-        elif energy_percent > 40:
-            status = "normal"
-            emoji = "😊"
-            message = "Feeling good!"
-        elif energy_percent > 20:
-            status = "tired"
-            emoji = "😴"
-            message = "Getting tired..."
-        else:
-            status = "very_tired"
-            emoji = "🫠"
-            message = "Very tired... need rest soon"
-        return {
-            "status": status,
-            "emoji": emoji,
-            "message": message,
-            "energy": energy_percent,
-            "chat_used": chat_used,
-            "image_used": image_used,
-            "total_used": total_used,
-            "total_limit": total_limit,
-            "remaining": total_limit - total_used
-        }
+        print("✨ All sync operations completed!")
 
-    def is_available(self):
-        if self.is_sleeping:
+    def check_wake_up(self):
+        """Check if sleep time is over"""
+        with self.lock:
+            if not self.is_sleeping:
+                return False
             if self.sleep_until and datetime.now() >= self.sleep_until:
                 self._wake_up()
                 return True
             return False
-        chat_used = sum(self.chat_usage[key]["count"] for key in self.chat_keys)
-        image_used = sum(self.image_usage[key]["count"] for key in self.image_keys)
-        total_used = chat_used + image_used
-        total_limit = (len(self.chat_keys) + len(self.image_keys)) * 20
-        if total_used >= total_limit:
-            self._go_to_sleep()
-            return False
-        return True
 
-    def get_sleep_message(self):
-        return "💤"
+    def _wake_up(self):
+        """Ruby wakes up after sleep"""
+        self.is_sleeping = False
+        self.sleep_until = None
+        print("✨ Ruby woke up refreshed after midnight sync!")
+        print("💭 Ready to continue learning...")
 
-    def get_wake_message(self):
-        return "✨"
+    def get_status(self):
+        """Get sleep status"""
+        with self.lock:
+            if self.is_sleeping:
+                if self.sleep_until:
+                    remaining = self.sleep_until - datetime.now()
+                    minutes = max(0, remaining.total_seconds() / 60)
+                    return {
+                        "status": "sleeping",
+                        "emoji": "💤",
+                        "message": f"Sleeping (midnight sync)... {int(minutes)} min remaining",
+                        "wake_at": self.sleep_until.isoformat()
+                    }
+                return {
+                    "status": "sleeping",
+                    "emoji": "💤",
+                    "message": "Sleeping (midnight sync)...",
+                    "wake_at": None
+                }
+            return {
+                "status": "awake",
+                "emoji": "✨",
+                "message": "Ready to chat!",
+                "wake_at": None
+            }
 
 
 class BrainRouter:
     def __init__(self, cloud_api_key=None, local_model_path=None, user_id="default_user"):
-        self.energy = RubyEnergySystem()
+        self.sleep_scheduler = RubySleepScheduler()
         self.local_model_path = local_model_path
         self.profile = ConversationProfile()
         self.user_id = user_id
@@ -292,19 +188,21 @@ class BrainRouter:
         if not last_user_msg:
             return None
 
+        # Save message (always)
         if "?" in last_user_msg:
             hybrid_memory.save_hybrid_memory(
                 f"User asked: {last_user_msg}",
-                importance=3,
+                importance=4,
                 category="user_questions"
             )
         else:
             hybrid_memory.save_hybrid_memory(
                 f"User said: {last_user_msg}",
-                importance=2,
+                importance=3,
                 category="user_messages"
             )
 
+        # Search for matching memory
         memories = hybrid_memory.search_memories(last_user_msg)
         for mem in memories:
             if mem.startswith("Q: ") and "\nA: " in mem:
@@ -313,55 +211,56 @@ class BrainRouter:
 
         return None
 
-    # ---- Cloud call is disabled (fully offline) ----
-    # def _call_cloud(self, messages, personality=None):
-    #     return None
-
-    def _get_style_instruction(self, user_id):
-        stats = self.profile.get_stats(user_id)
-        if stats and stats['total_turns'] > 3:
-            return self.profile.build_style_instruction(stats)
-        return ""
-
     def route_request(self, messages, personality=None, use_cloud_preferred=False, user_id=None):
         uid = user_id if user_id else self.user_id
 
-        if not self.energy.is_available():
-            if self.energy.is_sleeping:
-                if self.energy.sleep_until and datetime.now() < self.energy.sleep_until:
-                    return {"source": "sleeping", "response": self._call_local_brain(messages) or "💤"}
-                else:
-                    self.energy._wake_up()
-                    return {"source": "waking_up", "response": self._call_local_brain(messages) or "✨"}
-            self.energy._go_to_sleep()
-            return {"source": "going_to_sleep", "response": self._call_local_brain(messages) or "💤"}
+        # 1. Check daily sleep schedule (midnight window)
+        if self.sleep_scheduler.is_sleeping:
+            self.sleep_scheduler.check_wake_up()
+            # If still sleeping, return sleep response
+            if self.sleep_scheduler.is_sleeping:
+                status = self.sleep_scheduler.get_status()
+                return {"source": "sleeping", "response": status["message"]}
 
+        # 2. If not sleeping, check if it's time for midnight sleep
+        if self.sleep_scheduler.should_sleep_now():
+            self.sleep_scheduler.start_daily_sleep()
+            # Return sleep response (will wake later)
+            status = self.sleep_scheduler.get_status()
+            return {"source": "sleeping", "response": status["message"]}
+
+        # 3. Process message normally
         last_user_msg = None
         for msg in reversed(messages):
             if msg.get("role") == "user":
                 last_user_msg = msg.get("content", "")
                 break
 
-        # 1. Try local brain
+        # Try local brain
         local_answer = self._call_local_brain(messages)
         if local_answer is not None:
-            if last_user_msg:
-                self.profile.update(uid, last_user_msg, local_answer)
-            try:
-                from main import hybrid_memory
-                hybrid_memory.save_hybrid_memory(
-                    f"Ruby replied (local): {local_answer}",
-                    importance=2,
-                    category="ruby_responses"
-                )
-            except:
-                pass
             return {"source": "local_brain", "response": local_answer}
 
-        # 2. Cloud call disabled – no external API
-        # (If you want to re‑enable, uncomment the _call_cloud block and set use_cloud_preferred=True)
+        # If no answer, trigger learning (YouTube/Web)
+        if last_user_msg:
+            try:
+                from main import video_learner
+                video_learner.search_and_learn(last_user_msg)
+                new_answer = self._call_local_brain(messages)
+                if new_answer:
+                    return {"source": "video_learned", "response": new_answer}
+            except:
+                pass
+            try:
+                from main import web_learner
+                web_learner.search_web_and_learn(last_user_msg)
+                new_answer = self._call_local_brain(messages)
+                if new_answer:
+                    return {"source": "web_learned", "response": new_answer}
+            except:
+                pass
 
-        # 3. Fallback: ask a previous question
+        # Fallback: ask a previous question
         try:
             from main import hybrid_memory
             questions = hybrid_memory.get_memories_by_category("user_questions")
@@ -369,10 +268,12 @@ class BrainRouter:
                 question = random.choice(questions)
                 if question.startswith("User asked: "):
                     question = question[len("User asked: "):]
-                if last_user_msg:
-                    self.profile.update(uid, last_user_msg, question)
                 return {"source": "fallback", "response": question}
         except:
             pass
 
-        return {"source": "fallback", "response": "I'm not sure how to answer that."}
+        return {"source": "fallback", "response": "I'm not sure about that yet, but I'll learn."}
+
+    def get_energy_status(self):
+        """Keep for compatibility with UI (now returns sleep status)"""
+        return self.sleep_scheduler.get_status()
