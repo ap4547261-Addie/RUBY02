@@ -6,7 +6,7 @@ import os
 import json
 import time
 import threading
-import subprocess
+import urllib.request
 from datetime import datetime, timedelta
 import random
 from tools.profile import ConversationProfile
@@ -184,10 +184,11 @@ class EnergyManager:
 
 
 class BrainRouter:
-    def __init__(self, local_model="tinyllama", user_id="default_user"):
+    def __init__(self, local_model="tinyllama", user_id="default_user", ollama_url="http://127.0.0.1:11434/api/generate"):
         self.energy = EnergyManager()
         self.sleep_scheduler = self.energy._sleep_scheduler
         self.local_model = local_model
+        self.ollama_url = ollama_url
         self.profile = ConversationProfile()
         self.user_id = user_id
         print("🧠 100% Offline BrainRouter initialized!")
@@ -253,19 +254,31 @@ class BrainRouter:
         if local_answer is not None:
             return {"source": "local_brain", "response": local_answer}
 
-        # 2. Fall back to local Ollama inference model for conversational responses / greetings
+        # 2. Use HTTP API to talk to local Ollama (Android & Termux compatible)
         if last_user_msg:
             try:
                 sys_prompt = personality or "You are Ruby, a sassy, emotional girl with orange hair."
                 prompt = f"{sys_prompt}\n\nUser: {last_user_msg}\nRuby:"
                 
-                cmd = ["ollama", "run", self.local_model, prompt]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-                response = result.stdout.strip()
-                if response:
-                    return {"source": "local_ollama", "response": response}
+                payload = {
+                    "model": self.local_model,
+                    "prompt": prompt,
+                    "stream": False
+                }
+                data = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(
+                    self.ollama_url,
+                    data=data,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=20) as response:
+                    res_body = json.loads(response.read().decode("utf-8"))
+                    response_text = res_body.get("response", "").strip()
+                    if response_text:
+                        return {"source": "local_ollama", "response": response_text}
             except Exception as e:
-                print(f"Local Ollama generation error: {e}")
+                print(f"Local Ollama HTTP connection error: {e}")
 
         # 3. Final fallback if local execution fails entirely
         return {"source": "fallback", "response": f"Ugh, my local model didn't respond, Addie. You said: '{last_user_msg}'?"}
