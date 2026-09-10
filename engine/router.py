@@ -199,7 +199,13 @@ class BrainRouter:
         if Llama is not None and os.path.exists(model_path):
             try:
                 print(f"🧠 Loading native model from {model_path}...")
-                self.model = Llama(model_path=model_path, n_ctx=2048, n_threads=4, verbose=False)
+                self.model = Llama(
+                    model_path=model_path,
+                    n_ctx=512,          # Optimized context window to prevent CPU choking on mobile
+                    n_threads=4,        # Restrict CPU threads to avoid maxing out mobile cores
+                    n_batch=128,        # Smaller batch size for faster token processing
+                    verbose=False
+                )
                 print("✨ Native model loaded successfully!")
             except Exception as e:
                 print(f"Failed to load native model weights: {e}")
