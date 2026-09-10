@@ -1,11 +1,10 @@
 # =====================================================================
-# engine/router.py – Ruby's Brain Router, Energy Manager & Sleep Scheduler
+# engine/router.py – Ruby's Native Llama-Cpp Brain Router & Sleep Scheduler
 # =====================================================================
 
 import os
 import json
 import threading
-import urllib.request
 import random
 from datetime import datetime, timedelta
 
@@ -18,6 +17,11 @@ try:
     from personality.ruby import RUBY_PROMPT
 except ImportError:
     RUBY_PROMPT = "You are Ruby, a sassy, emotional human girl."
+
+try:
+    from llama_cpp import Llama
+except ImportError:
+    Llama = None
 
 
 class RubySleepScheduler:
@@ -35,7 +39,6 @@ class RubySleepScheduler:
         self.last_sleep_date = None
         self.lock = threading.Lock()
 
-        # Sleep window: 00:00 to 00:30 (midnight)
         self.sleep_start_hour = 0
         self.sleep_start_minute = 0
         self.sleep_duration_minutes = 30
@@ -187,13 +190,21 @@ class EnergyManager:
 
 
 class BrainRouter:
-    def __init__(self, local_model="tinyllama", user_id="default_user", ollama_url="http://127.0.0.1:11434/api/generate"):
+    def __init__(self, model_path="tinyllama.gguf", user_id="default_user"):
         self.energy = EnergyManager()
         self.sleep_scheduler = self.energy._sleep_scheduler
-        self.local_model = local_model
-        self.ollama_url = ollama_url
         self.user_id = user_id
-        print("🧠 100% Offline BrainRouter initialized!")
+        self.model = None
+
+        if Llama is not None and os.path.exists(model_path):
+            try:
+                print(f"🧠 Loading native model from {model_path}...")
+                self.model = Llama(model_path=model_path, n_ctx=2048, n_threads=4, verbose=False)
+                print("✨ Native model loaded successfully!")
+            except Exception as e:
+                print(f"Failed to load native model weights: {e}")
+        else:
+            print(f"⚠️ Warning: llama_cpp package not found or model file '{model_path}' missing.")
 
     def _call_local_brain(self, messages):
         try:
@@ -238,33 +249,13 @@ class BrainRouter:
 
         return None
 
-    def _generate_local_fallback(self, user_msg: str) -> str:
-        """Generates dynamic in-character responses when offline without needing Ollama."""
+    def _generate_fallback(self, user_msg: str) -> str:
         msg_lower = user_msg.lower().strip()
-        
         if any(g in msg_lower for g in ["hi", "hyy", "hello", "hey", "sup"]):
-            responses = [
-                "Hey... took you long enough to say something.",
-                "Hyy yourself. What do you want now?",
-                "Oh, you're back. Don't act all excited to see me or anything."
-            ]
+            return "Hey... took you long enough to say something."
         elif "who are you" in msg_lower or "your name" in msg_lower:
-            responses = [
-                "I'm Ruby. Your favorite psychologist-in-training, whether you admit it or not.",
-                "Seriously? You're asking me that? I'm Ruby, 5'7, orange-golden hair, and definitely out of your league."
-            ]
-        elif "?" in user_msg:
-            responses = [
-                f"You're full of questions today about '{user_msg}'. Care to figure it out yourself?",
-                "Why are you psychoanalyzing me with questions right now? Turn it around."
-            ]
-        else:
-            responses = [
-                f"I heard '{user_msg}', but honestly my mind's wandering somewhere else right now...",
-                "Hmm. Say something more interesting than that, Addie.",
-                "You say the randomest things sometimes. What's actually on your mind?"
-            ]
-        return random.choice(responses)
+            return "I'm Ruby. Your favorite psychologist-in-training, whether you admit it or not."
+        return f"I heard '{user_msg}', but my mind's wandering somewhere else right now, Addie..."
 
     def route_request(self, messages, personality=None, user_id=None):
         uid = user_id if user_id else self.user_id
@@ -284,36 +275,28 @@ class BrainRouter:
         if local_answer is not None:
             return {"source": "local_brain", "response": local_answer}
 
-        # 2. HTTP call to local Ollama server if running
-        if last_user_msg:
+        # 2. Native generation via embedded llama-cpp-python
+        if self.model and last_user_msg:
             try:
                 sys_prompt = personality or RUBY_PROMPT
                 prompt = f"{sys_prompt}\n\nUser: {last_user_msg}\nRuby:"
                 
-                payload = {
-                    "model": self.local_model,
-                    "prompt": prompt,
-                    "stream": False
-                }
-                data = json.dumps(payload).encode("utf-8")
-                req = urllib.request.Request(
-                    self.ollama_url,
-                    data=data,
-                    headers={"Content-Type": "application/json"},
-                    method="POST"
+                output = self.model(
+                    prompt,
+                    max_tokens=150,
+                    stop=["User:", "\nUser:"],
+                    temperature=0.7,
+                    echo=False
                 )
-                with urllib.request.urlopen(req, timeout=3) as response:
-                    res_body = json.loads(response.read().decode("utf-8"))
-                    response_text = res_body.get("response", "").strip()
-                    if response_text:
-                        return {"source": "local_ollama", "response": response_text}
-            except Exception:
-                pass  # Ollama not running; silently fallback to local personality generator
+                response_text = output["choices"][0]["text"].strip()
+                if response_text:
+                    return {"source": "native_local", "response": response_text}
+            except Exception as e:
+                print(f"Native inference error: {e}")
 
-        # 3. Intelligent local fallback (keeps Ruby in character without throwing server errors)
-        fallback_text = self._generate_local_fallback(last_user_msg or "")
+        # 3. Fallback if native model isn't loaded or fails
+        fallback_text = self._generate_fallback(last_user_msg or "")
         return {"source": "fallback", "response": fallback_text}
 
     def get_energy_status(self):
         return self.energy.get_energy_status()
-
