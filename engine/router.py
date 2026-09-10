@@ -268,7 +268,7 @@ class BrainRouter:
                 print(f"Local Ollama generation error: {e}")
 
         # 3. Final fallback if local execution fails entirely
-        return {"source": "fallback", "response": "Hyy? Is that all you've got to say? Spit it out."}
+        return {"source": "fallback", "response": f"Ugh, my local model didn't respond, Addie. You said: '{last_user_msg}'?"}
 
     def get_energy_status(self):
         return self.energy.get_energy_status()
