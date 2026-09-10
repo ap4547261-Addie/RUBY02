@@ -245,24 +245,25 @@ class BrainRouter:
             status = self.energy.get_energy_status()
             return {"source": "sleeping", "response": status["message"]}
 
+        # Extract last_user_msg upfront so it's globally available in route_request
+        last_user_msg = None
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                last_user_msg = msg.get("content", "")
+                break
+
         local_answer = self._call_local_brain(messages)
         if local_answer is not None:
             return {"source": "local_brain", "response": local_answer}
 
-        if self.brain_core:
-            last_user_msg = None
-            for msg in reversed(messages):
-                if msg.get("role") == "user":
-                    last_user_msg = msg.get("content", "")
-                    break
-            if last_user_msg:
-                try:
-                    sys_prompt = personality or "You are Ruby, a sassy, emotional girl with orange hair."
-                    response = self.brain_core.generate_response(last_user_msg, system_prompt=sys_prompt)
-                    if response:
-                        return {"source": "local_llm", "response": response}
-                except Exception as e:
-                    print(f"LLM generation error: {e}")
+        if self.brain_core and last_user_msg:
+            try:
+                sys_prompt = personality or "You are Ruby, a sassy, emotional girl with orange hair."
+                response = self.brain_core.generate_response(last_user_msg, system_prompt=sys_prompt)
+                if response:
+                    return {"source": "local_llm", "response": response}
+            except Exception as e:
+                print(f"LLM generation error: {e}")
 
         if last_user_msg:
             try:
