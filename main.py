@@ -23,7 +23,7 @@ from personality.ruby import RUBY_PROMPT
 # ============================================
 # 1. INITIALIZE CORE BRAIN MODULES
 # ============================================
-router = BrainRouter(local_model="tinyllama")
+router = BrainRouter(model_path="tinyllama.gguf")
 brain_core = RubyBrainCore()
 # ============================================
 # 2. INITIALIZE LOCAL MEMORY SYSTEM
