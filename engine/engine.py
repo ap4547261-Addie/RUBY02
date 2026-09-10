@@ -1,9 +1,11 @@
-# engine/engine.py
+# =====================================================================
+# engine/engine.py – Ruby Engine Wrapper
+# =====================================================================
+
 import os
 from datetime import datetime
 from engine.vector_store import HybridMemorySystem
 from engine.router import BrainRouter
-# from engine.brain import RubyBrainCore   # removed – now using LocalBrain
 from personality.ruby import RUBY_PROMPT
 
 class RubyEngine:
@@ -26,7 +28,7 @@ class RubyEngine:
     def think(self, user_message):
         """
         Main thinking method - processes user message and generates response
-        Returns a dict: {"response": str, "source": str}
+        Returns a clean string response for UI compatibility.
         """
         # 1. Fetch current stats and increment message depth
         current_state = self.memory.get_state()
@@ -63,19 +65,17 @@ class RubyEngine:
 
         # 6. Generate response via BrainRouter
         router_result = self.router.route_request(messages, personality=current_personality)
-        response_text = router_result.get("response", "")
-        source = router_result.get("source", "unknown")
+        
+        if isinstance(router_result, dict):
+            response_text = router_result.get("response", "")
+        else:
+            response_text = str(router_result)
 
-        # 7. Media generation is disabled (no Gemini) – remove or stub if needed
-        # response_text = self._process_media_tags(response_text)  # disabled
-
-        # 8. Post-process tags (like [SAVE_MEMORY:...]) and wrap up
+        # 7. Post-process tags (like [SAVE_MEMORY:...]) and wrap up
         self.memory.process(response_text, user_message)
 
-        # Return a dict with both response and source
-        return {"response": response_text, "source": source}
-
-    # _process_media_tags removed – no image/video generation without Gemini
+        # Return just the response string so Flet renders cleanly without raw dictionaries
+        return response_text
 
     def _evaluate_emotion(self, message, state, depth):
         """
