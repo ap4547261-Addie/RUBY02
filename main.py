@@ -4,6 +4,7 @@ import json
 import asyncio
 import threading
 import urllib.request
+import ssl
 import flet as ft
 from datetime import datetime
 import config
@@ -30,13 +31,18 @@ MODEL_FILENAME = "tinyllama.gguf"
 MODEL_PATH = os.path.join(STORAGE_DIR, MODEL_FILENAME)
 
 def ensure_model_exists(page_ref=None, status_ref=None):
-    """Download TinyLlama automatically in a background thread on first launch if not present"""
+    """Download TinyLlama automatically in a background thread on first launch with SSL bypass"""
     if os.path.exists(MODEL_PATH):
-        print(f"✅ TinyLlama model found at {MODEL_PATH}")
-        if status_ref and page_ref:
-            status_ref.value = "✨ Ready to chat!"
-            page_ref.update()
-        return True
+        file_size_mb = os.path.getsize(MODEL_PATH) / (1024 * 1024)
+        if file_size_mb > 600:
+            print(f"✅ TinyLlama model found at {MODEL_PATH} ({file_size_mb:.2f} MB)")
+            if status_ref and page_ref:
+                status_ref.value = "✨ Ready to chat!"
+                page_ref.update()
+            return True
+        else:
+            print(f"⚠️ Incomplete model found ({file_size_mb:.2f} MB). Re-downloading...")
+            os.remove(MODEL_PATH)
 
     def download_worker():
         print("📥 Model not found in app storage. Downloading TinyLlama (638 MB)...")
@@ -45,14 +51,28 @@ def ensure_model_exists(page_ref=None, status_ref=None):
             page_ref.update()
 
         url = "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+        
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
         try:
-            urllib.request.urlretrieve(url, MODEL_PATH)
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, context=ctx) as response, open(MODEL_PATH, 'wb') as out_file:
+                while True:
+                    chunk = response.read(8192)
+                    if not chunk:
+                        break
+                    out_file.write(chunk)
+
             print("✅ TinyLlama download complete!")
             if status_ref and page_ref:
                 status_ref.value = "✨ Ready to chat!"
                 page_ref.update()
         except Exception as e:
+            import traceback
             print(f"❌ Failed to download model: {e}")
+            traceback.print_exc()
             if status_ref and page_ref:
                 status_ref.value = "❌ Model download failed."
                 page_ref.update()
