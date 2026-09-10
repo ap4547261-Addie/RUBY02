@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-inject_all.py – Injects training data into Ruby's memory using local Ollama LLM.
+inject_all.py – Injects training data into Ruby's memory using local Ollama HTTP API (Android compatible).
 """
 
 import os
 import json
 import sqlite3
-import subprocess
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -15,16 +15,14 @@ from pathlib import Path
 # ============================================
 STORAGE_DIR = os.path.expanduser("~/.ruby")
 DB_PATH = os.path.join(STORAGE_DIR, "ruby_memory.db")
-TRAINING_DIR = "training_data"          # folder with JSON files
-
-# Ollama model – adjust if you use a different one
-OLLAMA_MODEL = "tinyllama"   # lightweight, works on 4GB RAM
+OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
+OLLAMA_MODEL = "tinyllama"
 
 # ============================================
-# OLLAMA Q&A GENERATOR
+# OLLAMA Q&A GENERATOR (HTTP API - ANDROID SAFE)
 # ============================================
 def generate_qa_with_ollama(chunk: str) -> str:
-    """Generate Q&A from a text chunk using local Ollama."""
+    """Generate Q&A from a text chunk using local Ollama via HTTP."""
     if not chunk or len(chunk.strip()) < 20:
         return "Q: What is this?\nA: Not enough text to generate a meaningful Q&A."
 
@@ -36,11 +34,23 @@ A: <the answer>
 Text: {chunk}"""
 
     try:
-        cmd = ["ollama", "run", OLLAMA_MODEL, prompt]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
-        output = result.stdout.strip()
+        payload = {
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            OLLAMA_URL,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=45) as response:
+            res_body = json.loads(response.read().decode("utf-8"))
+            output = res_body.get("response", "").strip()
+
         if "Q:" in output and "A:" in output:
-            # Ensure it's properly formatted
             lines = output.split("\n")
             q_lines = []
             a_lines = []
@@ -60,15 +70,10 @@ Text: {chunk}"""
                 q = " ".join(q_lines)
                 a = " ".join(a_lines)
                 return f"Q: {q}\nA: {a}"
-            else:
-                return f"Q: What is the main idea?\nA: {chunk[:300]}..."
-        else:
-            # fallback
-            return f"Q: What is the key point?\nA: {chunk[:300]}..."
-    except subprocess.TimeoutExpired:
-        return f"Q: What is this about?\nA: {chunk[:200]}..."
+        
+        return f"Q: What is the main idea?\nA: {chunk[:300]}..."
     except Exception as e:
-        print(f"⚠️ Ollama error: {e}")
+        print(f"⚠️ Ollama HTTP error: {e}")
         return f"Q: What does this say?\nA: {chunk[:200]}..."
 
 # ============================================
@@ -139,17 +144,14 @@ def parse_json_file(filepath):
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
-        print(f"⚠️ JSON parse error: {e}")
+        print(f"⚠️ JSON parse error in {filepath}: {e}")
         return []
 
     text = extract_text_from_json(data)
-    # Clean up whitespace
     text = " ".join(text.split())
     if len(text) < 50:
         return []
 
-    # Split into paragraphs / sentences
-    # Simple: split by newline or period, but keep chunks of ~300 words
     chunks = []
     current = []
     word_count = 0
@@ -164,7 +166,6 @@ def parse_json_file(filepath):
     if current:
         chunks.append(". ".join(current) + ".")
 
-    # Generate Q&A for each chunk
     qa_pairs = []
     for chunk in chunks:
         if len(chunk) > 30:
@@ -174,18 +175,24 @@ def parse_json_file(filepath):
     return qa_pairs
 
 def main():
-    print("🚀 RUBY TRAINING DATA INJECTOR (Ollama)")
+    print("🚀 RUBY TRAINING DATA INJECTOR (HTTP API)")
     init_db()
 
-    if not os.path.exists(TRAINING_DIR):
-        print(f"⚠️ Training directory '{TRAINING_DIR}' not found.")
-        return
-
     json_files = []
-    for root, _, files in os.walk(TRAINING_DIR):
-        for file in files:
-            if file.endswith(".json"):
-                json_files.append(os.path.join(root, file))
+    
+    # Search both root directory and training_data directory for conversation JSON files
+    search_dirs = [".", "training_data"]
+    for d in search_dirs:
+        if os.path.exists(d):
+            for file in os.listdir(d):
+                if file.startswith("conversations-") and file.endswith(".json"):
+                    full_path = os.path.join(d, file)
+                    if full_path not in json_files:
+                        json_files.append(full_path)
+
+    if not json_files:
+        print("⚠️ No conversation JSON files found in root or training_data directory.")
+        return
 
     print(f"📊 Found {len(json_files)} JSON files to process")
     total_injected = 0
