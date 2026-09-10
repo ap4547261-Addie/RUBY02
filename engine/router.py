@@ -1,5 +1,5 @@
 # =====================================================================
-# engine/router.py – Ruby's Brain Router & Sleep Scheduler
+# engine/router.py – Ruby's Brain Router, Energy Manager & Sleep Scheduler
 # =====================================================================
 
 import os
@@ -34,21 +34,17 @@ class RubySleepScheduler:
         # Sleep window: 00:00 to 00:30 (midnight)
         self.sleep_start_hour = 0
         self.sleep_start_minute = 0
-        self.sleep_duration_minutes = 30  # total sleep time
+        self.sleep_duration_minutes = 30
 
         print("🌙 Ruby's Daily Sleep Scheduler initialized")
-        print(f"   Sleep window: {self.sleep_start_hour:02d}:{self.sleep_start_minute:02d} – {self.sleep_start_minute + self.sleep_duration_minutes:02d} (daily)")
-        print("   Sync: Memories, Vector DB, Cloud Backup")
 
     def _is_within_sleep_window(self):
-        """Check if current time is within the sleep window (midnight)"""
         now = datetime.now()
         start = now.replace(hour=self.sleep_start_hour, minute=self.sleep_start_minute, second=0, microsecond=0)
         end = start + timedelta(minutes=self.sleep_duration_minutes)
         return start <= now < end
 
     def should_sleep_now(self):
-        """Check if it's time for today's daily sleep (midnight window)"""
         with self.lock:
             today = datetime.now().date()
             if self.last_sleep_date == today:
@@ -58,7 +54,6 @@ class RubySleepScheduler:
             return self._is_within_sleep_window()
 
     def start_daily_sleep(self):
-        """Ruby goes to sleep for 30 minutes (midnight sync)"""
         with self.lock:
             if self.is_sleeping:
                 return
@@ -69,51 +64,37 @@ class RubySleepScheduler:
             self.last_sleep_date = datetime.now().date()
 
             print(f"😴 Ruby is going to sleep for {sleep_minutes} minutes (midnight sync)")
-            print(f"🕐 Will wake at {self.sleep_until.strftime('%I:%M %p')}")
-            print("📡 Starting daily sync...")
-
             sync_thread = threading.Thread(target=self._perform_sync)
             sync_thread.daemon = True
             sync_thread.start()
 
     def _perform_sync(self):
-        """Perform all sync operations during sleep"""
         try:
-            print("🔄 [SYNC] Syncing conversation history...")
-            from main import conversation_history, save_chat_history
+            from main import save_chat_history
             save_chat_history()
-            print("✅ [SYNC] Chat history saved")
-        except Exception as e:
-            print(f"⚠️ [SYNC] Chat history error: {e}")
+        except Exception:
+            pass
 
         try:
-            print("🔄 [SYNC] Compressing old memories...")
             from main import hybrid_memory
             hybrid_memory.compress_memories(days_threshold=30)
-            print("✅ [SYNC] Memories compressed")
-        except Exception as e:
-            print(f"⚠️ [SYNC] Memory compression error: {e}")
+        except Exception:
+            pass
 
         try:
-            print("🔄 [SYNC] Backing up to Gmail and Cloud...")
             from main import gmail, cloud, MEMORY_DB, KNOWLEDGE_DB
-
             if gmail:
                 gmail.backup_db(MEMORY_DB, "ruby_memory.db")
                 gmail.backup_db(KNOWLEDGE_DB, "ruby_knowledge.db")
-                print("✅ [SYNC] Gmail backup completed")
-
             if cloud:
                 cloud.backup_db(MEMORY_DB, "ruby_memory.db")
                 cloud.backup_db(KNOWLEDGE_DB, "ruby_knowledge.db")
-                print("✅ [SYNC] Cloud backup completed")
-        except Exception as e:
-            print(f"⚠️ [SYNC] Backup error: {e}")
+        except Exception:
+            pass
 
         print("✨ All sync operations completed!")
 
     def check_wake_up(self):
-        """Check if sleep time is over"""
         with self.lock:
             if not self.is_sleeping:
                 return False
@@ -123,14 +104,11 @@ class RubySleepScheduler:
             return False
 
     def _wake_up(self):
-        """Ruby wakes up after sleep"""
         self.is_sleeping = False
         self.sleep_until = None
         print("✨ Ruby woke up refreshed after midnight sync!")
-        print("💭 Ready to continue learning...")
 
     def get_status(self):
-        """Get sleep status"""
         with self.lock:
             if self.is_sleeping:
                 if self.sleep_until:
@@ -156,14 +134,73 @@ class RubySleepScheduler:
             }
 
 
+class EnergyManager:
+    """Manages Ruby's energy and sleep integration for UI compatibility"""
+    def __init__(self):
+        self._energy_val = 100
+        self.is_sleeping = False
+        self.sleep_until = None
+        self._sleep_scheduler = RubySleepScheduler()
+
+    def __int__(self):
+        return self._energy_val
+
+    def __index__(self):
+        return self._energy_val
+
+    def __eq__(self, other):
+        return self._energy_val == other
+
+    def __gt__(self, other):
+        return self._energy_val > other
+
+    def __lt__(self, other):
+        return self._energy_val < other
+
+    def __ge__(self, other):
+        return self._energy_val >= other
+
+    def __le__(self, other):
+        return self._energy_val <= other
+
+    def __str__(self):
+        return str(self._energy_val)
+
+    def __repr__(self):
+        return str(self._energy_val)
+
+    def is_available(self):
+        if self._sleep_scheduler.should_sleep_now():
+            self._go_to_sleep()
+        if self.is_sleeping:
+            if self._sleep_scheduler.check_wake_up():
+                self._wake_up()
+        return not self.is_sleeping
+
+    def _go_to_sleep(self):
+        self.is_sleeping = True
+        self._sleep_scheduler.start_daily_sleep()
+        self.sleep_until = self._sleep_scheduler.sleep_until
+
+    def _wake_up(self):
+        self.is_sleeping = False
+        self.sleep_until = None
+        self._sleep_scheduler._wake_up()
+
+    def get_energy_status(self):
+        status = self._sleep_scheduler.get_status()
+        status["energy"] = self._energy_val
+        return status
+
+
 class BrainRouter:
     def __init__(self, cloud_api_key=None, local_model_path=None, user_id="default_user", brain_core=None):
-        self.sleep_scheduler = RubySleepScheduler()
+        self.energy = EnergyManager()
+        self.sleep_scheduler = self.energy._sleep_scheduler
         self.local_model_path = local_model_path
         self.profile = ConversationProfile()
         self.user_id = user_id
-        self.brain_core = brain_core   # store the brain
-        self.energy = 100              # Fixed: initialized energy attribute for UI compatibility
+        self.brain_core = brain_core
 
     def _call_local_brain(self, messages, context=None):
         try:
@@ -204,24 +241,14 @@ class BrainRouter:
     def route_request(self, messages, personality=None, use_cloud_preferred=False, user_id=None):
         uid = user_id if user_id else self.user_id
 
-        # 1. Check daily sleep schedule (midnight window)
-        if self.sleep_scheduler.is_sleeping:
-            self.sleep_scheduler.check_wake_up()
-            if self.sleep_scheduler.is_sleeping:
-                status = self.sleep_scheduler.get_status()
-                return {"source": "sleeping", "response": status["message"]}
-
-        if self.sleep_scheduler.should_sleep_now():
-            self.sleep_scheduler.start_daily_sleep()
-            status = self.sleep_scheduler.get_status()
+        if not self.energy.is_available():
+            status = self.energy.get_energy_status()
             return {"source": "sleeping", "response": status["message"]}
 
-        # 2. Try local memory (SQLite Q&A)
         local_answer = self._call_local_brain(messages)
         if local_answer is not None:
             return {"source": "local_brain", "response": local_answer}
 
-        # 3. Use local LLM (Ollama) if available
         if self.brain_core:
             last_user_msg = None
             for msg in reversed(messages):
@@ -237,7 +264,6 @@ class BrainRouter:
                 except Exception as e:
                     print(f"LLM generation error: {e}")
 
-        # 4. Fallback: try learning from web/video (background)
         if last_user_msg:
             try:
                 from main import video_learner
@@ -256,11 +282,7 @@ class BrainRouter:
             except:
                 pass
 
-        # 5. Ultimate fallback
         return {"source": "fallback", "response": "I don't know yet, but I'm learning. Ask me something else?"}
 
     def get_energy_status(self):
-        """Returns sleep and energy status for UI compatibility"""
-        status = self.sleep_scheduler.get_status()
-        status["energy"] = self.energy
-        return status
+        return self.energy.get_energy_status()
