@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-inject_all.py – Injects training data into Ruby's memory using local Ollama HTTP API (Android compatible).
+inject_all.py – Final training data injector for Ruby's memory using local Ollama HTTP API 
+with built-in project term blacklisting (Android compatible).
 """
 
 import os
@@ -11,12 +12,32 @@ from datetime import datetime
 from pathlib import Path
 
 # ============================================
-# CONFIG
+# CONFIG & BLACKLIST
 # ============================================
 STORAGE_DIR = os.path.expanduser("~/.ruby")
 DB_PATH = os.path.join(STORAGE_DIR, "ruby_memory.db")
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 OLLAMA_MODEL = "tinyllama"
+
+BLOCKED_KEYWORDS = [
+    "ruby ai",
+    "making ruby",
+    "ruby app",
+    "ruby prompt",
+    "ruby architecture",
+    "brainrouter",
+    "energymanager",
+    "rubysleepscheduler",
+    "inject_all.py",
+    "ruby_memory.db"
+]
+
+def should_block_content(text: str) -> bool:
+    """Check if text contains any forbidden Ruby project or architecture keywords."""
+    if not text:
+        return False
+    text_lower = text.lower()
+    return any(keyword in text_lower for keyword in BLOCKED_KEYWORDS)
 
 # ============================================
 # OLLAMA Q&A GENERATOR (HTTP API - ANDROID SAFE)
@@ -139,7 +160,7 @@ def extract_text_from_json(data):
         return ""
 
 def parse_json_file(filepath):
-    """Read JSON, extract text, split into chunks, generate Q&A."""
+    """Read JSON, extract text, split into chunks, filter blocked terms, generate Q&A."""
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -169,18 +190,23 @@ def parse_json_file(filepath):
     qa_pairs = []
     for chunk in chunks:
         if len(chunk) > 30:
+            if should_block_content(chunk):
+                print(f"🚫 Blocked project content chunk: {chunk[:40]}...")
+                continue
+                
             qa = generate_qa_with_ollama(chunk)
             if qa:
+                if should_block_content(qa):
+                    print(f"🚫 Blocked generated Q&A containing project terms.")
+                    continue
                 qa_pairs.append(qa)
     return qa_pairs
 
 def main():
-    print("🚀 RUBY TRAINING DATA INJECTOR (HTTP API)")
+    print("🚀 RUBY TRAINING DATA INJECTOR (HTTP API + BLACKLIST)")
     init_db()
 
     json_files = []
-    
-    # Search both root directory and training_data directory for conversation JSON files
     search_dirs = [".", "training_data"]
     for d in search_dirs:
         if os.path.exists(d):
@@ -219,3 +245,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+            
