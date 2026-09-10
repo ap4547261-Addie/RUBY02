@@ -29,20 +29,36 @@ os.makedirs(STORAGE_DIR, exist_ok=True)
 MODEL_FILENAME = "tinyllama.gguf"
 MODEL_PATH = os.path.join(STORAGE_DIR, MODEL_FILENAME)
 
-def ensure_model_exists():
-    """Download TinyLlama automatically on first launch if not present in app storage"""
-    if not os.path.exists(MODEL_PATH):
+def ensure_model_exists(page_ref=None, status_ref=None):
+    """Download TinyLlama automatically in a background thread on first launch if not present"""
+    if os.path.exists(MODEL_PATH):
+        print(f"✅ TinyLlama model found at {MODEL_PATH}")
+        if status_ref and page_ref:
+            status_ref.value = "✨ Ready to chat!"
+            page_ref.update()
+        return True
+
+    def download_worker():
         print("📥 Model not found in app storage. Downloading TinyLlama (638 MB)...")
+        if status_ref and page_ref:
+            status_ref.value = "📥 Downloading local model (638 MB)..."
+            page_ref.update()
+
         url = "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
         try:
             urllib.request.urlretrieve(url, MODEL_PATH)
             print("✅ TinyLlama download complete!")
+            if status_ref and page_ref:
+                status_ref.value = "✨ Ready to chat!"
+                page_ref.update()
         except Exception as e:
             print(f"❌ Failed to download model: {e}")
-    else:
-        print(f"✅ TinyLlama model found at {MODEL_PATH}")
+            if status_ref and page_ref:
+                status_ref.value = "❌ Model download failed."
+                page_ref.update()
 
-ensure_model_exists()
+    threading.Thread(target=download_worker, daemon=True).start()
+    return False
 
 # ============================================
 # 1. INITIALIZE CORE BRAIN MODULES
@@ -311,6 +327,9 @@ def main_app_ui(page: ft.Page):
         weight=ft.FontWeight.NORMAL
     )
     status_label_ref = status_label
+
+    # Trigger background model download safely inside UI startup without ANR freezing
+    ensure_model_exists(page_ref=page, status_ref=status_label)
 
     user_input = ft.TextField(
         hint_text="Say something to Ruby or ask her to draw...", 
