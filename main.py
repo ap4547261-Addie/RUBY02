@@ -1,4 +1,3 @@
-
 import sqlite3
 import os
 import json
@@ -25,38 +24,35 @@ from personality.ruby import RUBY_PROMPT
 # ============================================
 router = BrainRouter(model_path="tinyllama.gguf")
 brain_core = RubyBrainCore()
+
 # ============================================
-# 2. INITIALIZE LOCAL MEMORY SYSTEM
+# 2. INITIALIZE HYBRID MEMORY SYSTEM (PINECONE + SQLITE)
 # ============================================
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", getattr(config, "PINECONE_API_KEY", ""))
+PINECONE_INDEX_HOST = os.getenv("PINECONE_INDEX_HOST", getattr(config, "PINECONE_INDEX_HOST", ""))
 
 hybrid_memory = HybridMemorySystem(
     sqlite_path="ruby_memory.db",
-    pinecone_api_key=None,  # Force local-only mode
-    index_host=None
+    pinecone_api_key=PINECONE_API_KEY if PINECONE_API_KEY else None,
+    index_host=PINECONE_INDEX_HOST if PINECONE_INDEX_HOST else None
 )
-
-PINECONE_API_KEY = getattr(config, "PINECONE_API_KEY", "")
-PINECONE_INDEX_HOST = getattr(config, "PINECONE_INDEX_HOST", "")
+print(f"☁️ Hybrid Memory System initialized (Pinecone status: {'Connected' if PINECONE_API_KEY else 'Disabled/Missing Key'})")
 
 # ============================================
-# 3. INITIALIZE LEARNING SYSTEMS (LOCAL-ONLY)
+# 3. INITIALIZE LEARNING SYSTEMS
 # ============================================
 
-# DataIngestion - Local knowledge base
 data_ingestion = DataIngestion(db_path="ruby_knowledge.db")
-print("📚 DataIngestion initialized (0 API calls)")
+print("📚 DataIngestion initialized")
 
-# WebLearner - Learn from web pages
 web_learner = WebLearner(data_ingestion)
-print("🌐 WebLearner initialized (0 API calls)")
+print("🌐 WebLearner initialized")
 
-# VideoLearner - Learn from YouTube
 video_learner = VideoLearner(data_ingestion)
-print("🎬 VideoLearner initialized (0 API calls)")
+print("🎬 VideoLearner initialized")
 
-# Instagram Connector - Learn from Instagram
 instagram_connector = InstagramConnector(hybrid_memory)
-print("📸 Instagram Connector initialized (0 API calls)")
+print("📸 Instagram Connector initialized")
 
 # ============================================
 # 4. INITIALIZE RUBY ENGINE
@@ -76,7 +72,6 @@ print("🧠 RubyEngine initialized!")
 # 5. INITIALIZE WEBSOCKET SERVER
 # ============================================
 
-# WebSocket Handler - Routes incoming data
 websocket_handler = WebSocketHandler(
     hybrid_memory,
     data_ingestion,
@@ -86,7 +81,6 @@ websocket_handler = WebSocketHandler(
 )
 print("🔌 WebSocketHandler initialized")
 
-# WebSocket Server - Listens for browser extension
 def start_websocket_server():
     """Start Ruby's WebSocket server with handler"""
     loop = asyncio.new_event_loop()
@@ -105,18 +99,16 @@ def start_websocket_server():
     finally:
         loop.close()
 
-# Start WebSocket server in background thread
 ws_thread = threading.Thread(target=start_websocket_server, daemon=True)
 ws_thread.start()
 print("🔌 WebSocket server running on ws://localhost:8765")
 
 # ============================================
 # 6. PERSISTENT STORAGE - CHAT HISTORY
-# ====================================
+# ============================================
 STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
-# Ensure token_gmail.pickle is in the app's storage
 token_source = "token_gmail.pickle"
 token_dest = os.path.join(STORAGE_DIR, "token_gmail.pickle")
 if os.path.exists(token_source) and not os.path.exists(token_dest):
@@ -131,6 +123,7 @@ else:
 MEMORY_DB = os.path.join(STORAGE_DIR, "ruby_memory.db")
 KNOWLEDGE_DB = os.path.join(STORAGE_DIR, "ruby_knowledge.db")
 HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
+
 def load_chat_history():
     if os.path.exists(HISTORY_FILE):
         try:
@@ -151,7 +144,6 @@ def save_chat_history():
 # 7. RUBY'S PERSONALITY PROMPT
 # ============================================
 
-# Dynamically calculate her current age
 today = datetime.now()
 birth_year = 2004
 birth_month = 8
@@ -236,7 +228,6 @@ def update_ruby_status():
                 else:
                     status_label_ref.value = "💤 Sleeping..."
             else:
-                # Show energy percentage and mood
                 energy_percent = int(status.get("energy", 100))
                 emoji = status.get("emoji", "✨")
                 remaining = status.get("remaining", 0)
@@ -275,15 +266,12 @@ def add_message(sender, text, is_user=False, image_path=None):
 # ============================================
 
 def search_and_learn(query: str) -> str:
-    """Search the web and learn from results - 0 API calls"""
+    """Search the web and learn from results"""
     try:
-        # Search web
-        from tools.web_learner import WebLearner
         web_learner_local = WebLearner(data_ingestion)
         result = web_learner_local.search_web_and_learn(query)
 
         if result.get("success"):
-            # Get knowledge from local DB
             knowledge = data_ingestion.search_knowledge(query, limit=3)
             if knowledge:
                 response = f"📚 I learned about '{query}' from the web!\n\n"
@@ -314,7 +302,6 @@ def main_app_ui(page: ft.Page):
     chat_list = ft.ListView(expand=True, spacing=12, auto_scroll=True)
     chat_list_ref = chat_list
 
-    # Load and render past messages on startup
     conversation_history = load_chat_history()
     for msg in conversation_history:
         sender_name = "Addie" if msg["role"] == "user" else "Ruby"
@@ -331,7 +318,6 @@ def main_app_ui(page: ft.Page):
         )
         chat_list.controls.append(bubble)
 
-    # Status label
     status_label = ft.Text(
         "✨ Checking status...",
         size=11,
@@ -352,7 +338,6 @@ def main_app_ui(page: ft.Page):
 
     def process_generation(text):
         try:
-            # Check if Ruby is available
             if not router.energy.is_available():
                 if router.energy.is_sleeping:
                     if router.energy.sleep_until and datetime.now() < router.energy.sleep_until:
@@ -373,35 +358,28 @@ def main_app_ui(page: ft.Page):
 
             current_depth = hybrid_memory.increment_interaction()
 
-            # Check if this is a search/learn request
             learn_keywords = ["learn about", "search for", "find out", "look up", "research", "teach me about"]
             is_learn_request = any(keyword in text.lower() for keyword in learn_keywords)
 
             if is_learn_request:
-                # Extract topic
                 topic = text
                 for keyword in learn_keywords:
                     topic = topic.replace(keyword, "").strip()
 
                 if topic:
-                    # Show Ruby is thinking
                     add_message("Ruby", f"🔍 Let me learn about '{topic}'...")
                     page.update()
 
-                    # Search and learn
                     response = search_and_learn(topic)
                     add_message("Ruby", response)
 
-                    # Update conversation history
                     conversation_history.append({"role": "user", "content": text})
                     conversation_history.append({"role": "assistant", "content": response})
                     save_chat_history()
                     return
 
-            # Normal conversation flow - Use RubyEngine
             reply = ruby_engine.think(text)
 
-            # Check if Ruby went to sleep
             if router.energy.is_sleeping:
                 add_message("Ruby", reply)
                 add_message("Ruby", f"\n💤 {router.energy.get_sleep_message()}")
@@ -412,7 +390,6 @@ def main_app_ui(page: ft.Page):
             conversation_history.append({"role": "assistant", "content": reply})
             save_chat_history()
 
-            # Check for memory saving tags
             if "[SAVE_MEMORY:" in reply:
                 parts = reply.split("[SAVE_MEMORY:")
                 clean_reply = parts[0].strip()
@@ -420,7 +397,6 @@ def main_app_ui(page: ft.Page):
                 hybrid_memory.save_hybrid_memory(memory_fact)
                 reply = f"{clean_reply}\n\n*(Memory Saved: {memory_fact})*"
 
-            # Check for image generation tags
             generated_img_path = None
             if "[GENERATE_IMAGE:" in reply:
                 parts = reply.split("[GENERATE_IMAGE:")
@@ -472,7 +448,6 @@ def main_app_ui(page: ft.Page):
 
     input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
-    # Header with status
     header = ft.Container(
         content=ft.Row([
             ft.Text("RUBY // GENIUS HUMAN CORE", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
@@ -489,7 +464,6 @@ def main_app_ui(page: ft.Page):
         ], expand=True)
     )
 
-    # Update status on startup
     update_ruby_status()
     page.update()
 
@@ -499,14 +473,13 @@ def main_app_ui(page: ft.Page):
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("🧠 RUBY'S BRAIN - COMPLETE SYSTEM")
+    print("🧠 RUBY'S BRAIN - COMPLETE SYSTEM (WITH PINECONE)")
     print("=" * 50)
     print(f"📚 Memory DB: ruby_memory.db")
     print(f"📖 Knowledge DB: ruby_knowledge.db")
     print(f"🔌 WebSocket: ws://localhost:8765")
-    print(f"📸 Instagram Data: instagram_data/")
     print("=" * 50)
-    print("✅ All systems initialized (0 API calls for learning)")
+    print("✅ All systems initialized with cloud Pinecone integration")
     print("📡 Waiting for browser extension connection...")
     print("=" * 50)
 
