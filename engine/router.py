@@ -6,6 +6,7 @@ import os
 import json
 import time
 import threading
+import subprocess
 from datetime import datetime, timedelta
 import random
 from tools.profile import ConversationProfile
@@ -21,7 +22,7 @@ class RubySleepScheduler:
     Ruby sleeps daily ONLY at midnight (00:00–00:30) to:
     - Sync memories with vector database
     - Compress old memories
-    - Backup to Gmail and Cloud
+    - Backup and state maintenance
     - Reset daily counters
     """
 
@@ -81,18 +82,7 @@ class RubySleepScheduler:
         except Exception:
             pass
 
-        try:
-            from main import gmail, cloud, MEMORY_DB, KNOWLEDGE_DB
-            if gmail:
-                gmail.backup_db(MEMORY_DB, "ruby_memory.db")
-                gmail.backup_db(KNOWLEDGE_DB, "ruby_knowledge.db")
-            if cloud:
-                cloud.backup_db(MEMORY_DB, "ruby_memory.db")
-                cloud.backup_db(KNOWLEDGE_DB, "ruby_knowledge.db")
-        except Exception:
-            pass
-
-        print("✨ All sync operations completed!")
+        print("✨ All offline sync operations completed!")
 
     def check_wake_up(self):
         with self.lock:
@@ -194,15 +184,15 @@ class EnergyManager:
 
 
 class BrainRouter:
-    def __init__(self, cloud_api_key=None, local_model_path=None, user_id="default_user", brain_core=None):
+    def __init__(self, local_model="tinyllama", user_id="default_user"):
         self.energy = EnergyManager()
         self.sleep_scheduler = self.energy._sleep_scheduler
-        self.local_model_path = local_model_path
+        self.local_model = local_model
         self.profile = ConversationProfile()
         self.user_id = user_id
-        self.brain_core = brain_core
+        print("🧠 100% Offline BrainRouter initialized!")
 
-    def _call_local_brain(self, messages, context=None):
+    def _call_local_brain(self, messages):
         try:
             from main import hybrid_memory
         except ImportError:
@@ -231,59 +221,54 @@ class BrainRouter:
             )
 
         memories = hybrid_memory.search_memories(last_user_msg)
-        for mem in memories:
-            if mem.startswith("Q: ") and "\nA: " in mem:
-                answer = mem.split("\nA: ", 1)[1]
-                return answer
+        
+        if isinstance(memories, str):
+            memories_list = [memories]
+        else:
+            memories_list = memories or []
+
+        for mem in memories_list:
+            if isinstance(mem, str) and "Q: " in mem and "\nA: " in mem:
+                parts = mem.split("\nA: ")
+                if len(parts) > 1:
+                    return parts[1].strip()
 
         return None
 
-    def route_request(self, messages, personality=None, use_cloud_preferred=False, user_id=None):
+    def route_request(self, messages, personality=None, user_id=None):
         uid = user_id if user_id else self.user_id
 
         if not self.energy.is_available():
             status = self.energy.get_energy_status()
             return {"source": "sleeping", "response": status["message"]}
 
-        # Extract last_user_msg upfront so it's globally available in route_request
         last_user_msg = None
         for msg in reversed(messages):
             if msg.get("role") == "user":
                 last_user_msg = msg.get("content", "")
                 break
 
+        # 1. Check local vector memory database first
         local_answer = self._call_local_brain(messages)
         if local_answer is not None:
             return {"source": "local_brain", "response": local_answer}
 
-        if self.brain_core and last_user_msg:
-            try:
-                sys_prompt = personality or "You are Ruby, a sassy, emotional girl with orange hair."
-                response = self.brain_core.generate_response(last_user_msg, system_prompt=sys_prompt)
-                if response:
-                    return {"source": "local_llm", "response": response}
-            except Exception as e:
-                print(f"LLM generation error: {e}")
-
+        # 2. Fall back to local Ollama inference model for conversational responses / greetings
         if last_user_msg:
             try:
-                from main import video_learner
-                video_learner.search_and_learn(last_user_msg)
-                new_answer = self._call_local_brain(messages)
-                if new_answer:
-                    return {"source": "video_learned", "response": new_answer}
-            except:
-                pass
-            try:
-                from main import web_learner
-                web_learner.search_web_and_learn(last_user_msg)
-                new_answer = self._call_local_brain(messages)
-                if new_answer:
-                    return {"source": "web_learned", "response": new_answer}
-            except:
-                pass
+                sys_prompt = personality or "You are Ruby, a sassy, emotional girl with orange hair."
+                prompt = f"{sys_prompt}\n\nUser: {last_user_msg}\nRuby:"
+                
+                cmd = ["ollama", "run", self.local_model, prompt]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                response = result.stdout.strip()
+                if response:
+                    return {"source": "local_ollama", "response": response}
+            except Exception as e:
+                print(f"Local Ollama generation error: {e}")
 
-        return {"source": "fallback", "response": "I don't know yet, but I'm learning. Ask me something else?"}
+        # 3. Final fallback if local execution fails entirely
+        return {"source": "fallback", "response": "Hyy? Is that all you've got to say? Spit it out."}
 
     def get_energy_status(self):
         return self.energy.get_energy_status()
