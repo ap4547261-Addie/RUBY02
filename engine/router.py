@@ -17,7 +17,7 @@ except ImportError:
 try:
     from personality.ruby import RUBY_PROMPT
 except ImportError:
-    RUBY_PROMPT = "You are Ruby, a sassy, emotional girl."
+    RUBY_PROMPT = "You are Ruby, a sassy, emotional human girl."
 
 
 class RubySleepScheduler:
