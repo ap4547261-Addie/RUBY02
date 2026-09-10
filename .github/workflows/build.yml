@@ -43,21 +43,14 @@ jobs:
     - name: Accept Android Licenses
       run: yes | flutter doctor --android-licenses || true
 
-    - name: Download TinyLlama Model
-      run: |
-        wget -O tinyllama.gguf "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
-
     - name: Build APK
       env:
-        # ---- Pinecone (for vector memory) ----
         PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
         PINECONE_INDEX_HOST: ${{ secrets.PINECONE_INDEX_HOST }}
-        # ---- Optional Gmail backup ----
         GMAIL_CREDENTIANLS_JSON: ${{ secrets.GMAIL_CREDENTIANLS_JSON }}
         GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
         FLET_SUPPRESS_PROMPTS: "true"
       run: |
-        # ---- Write Gmail/Cloud credentials (optional) ----
         if [ -n "$GMAIL_CREDENTIANLS_JSON" ]; then
           echo "$GMAIL_CREDENTIANLS_JSON" > credentials.json
           echo "✅ Gmail credentials written."
@@ -67,7 +60,6 @@ jobs:
           echo "✅ Cloud Storage service account written."
         fi
 
-        # ---- Clean and build ----
         rm -rf build/ dist/ __pycache__/
         flet build apk --python-version 3.14 --arch arm64-v8a --yes --verbose
 
