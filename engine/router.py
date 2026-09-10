@@ -1,4 +1,7 @@
-# engine/router.py – Sleeps ONLY at midnight for 30 min sync
+# =====================================================================
+# engine/router.py – Ruby's Brain Router & Sleep Scheduler
+# =====================================================================
+
 import os
 import json
 import time
@@ -48,13 +51,10 @@ class RubySleepScheduler:
         """Check if it's time for today's daily sleep (midnight window)"""
         with self.lock:
             today = datetime.now().date()
-            # If already slept today, don't sleep again
             if self.last_sleep_date == today:
                 return False
-            # If currently sleeping, keep sleeping
             if self.is_sleeping:
                 return True
-            # Only sleep if within the midnight window
             return self._is_within_sleep_window()
 
     def start_daily_sleep(self):
@@ -72,7 +72,6 @@ class RubySleepScheduler:
             print(f"🕐 Will wake at {self.sleep_until.strftime('%I:%M %p')}")
             print("📡 Starting daily sync...")
 
-            # Run sync in background thread (non-blocking)
             sync_thread = threading.Thread(target=self._perform_sync)
             sync_thread.daemon = True
             sync_thread.start()
@@ -110,15 +109,6 @@ class RubySleepScheduler:
                 print("✅ [SYNC] Cloud backup completed")
         except Exception as e:
             print(f"⚠️ [SYNC] Backup error: {e}")
-
-        try:
-            print("🔄 [SYNC] Syncing with vector database...")
-            # Optional: push important memories to Pinecone if available
-            # from main import hybrid_memory
-            # hybrid_memory.sync_to_pinecone()
-            print("✅ [SYNC] Vector database synced")
-        except Exception as e:
-            print(f"⚠️ [SYNC] Vector sync error: {e}")
 
         print("✨ All sync operations completed!")
 
@@ -173,6 +163,7 @@ class BrainRouter:
         self.profile = ConversationProfile()
         self.user_id = user_id
         self.brain_core = brain_core   # store the brain
+        self.energy = 100              # Fixed: initialized energy attribute for UI compatibility
 
     def _call_local_brain(self, messages, context=None):
         try:
@@ -189,7 +180,6 @@ class BrainRouter:
         if not last_user_msg:
             return None
 
-        # Save message (always)
         if "?" in last_user_msg:
             hybrid_memory.save_hybrid_memory(
                 f"User asked: {last_user_msg}",
@@ -203,7 +193,6 @@ class BrainRouter:
                 category="user_messages"
             )
 
-        # Search for matching memory
         memories = hybrid_memory.search_memories(last_user_msg)
         for mem in memories:
             if mem.startswith("Q: ") and "\nA: " in mem:
@@ -241,7 +230,6 @@ class BrainRouter:
                     break
             if last_user_msg:
                 try:
-                    # personality may be passed from UI; if not, use a default
                     sys_prompt = personality or "You are Ruby, a sassy, emotional girl with orange hair."
                     response = self.brain_core.generate_response(last_user_msg, system_prompt=sys_prompt)
                     if response:
@@ -272,5 +260,7 @@ class BrainRouter:
         return {"source": "fallback", "response": "I don't know yet, but I'm learning. Ask me something else?"}
 
     def get_energy_status(self):
-        """Keep for compatibility with UI (now returns sleep status)"""
-        return self.sleep_scheduler.get_status()
+        """Returns sleep and energy status for UI compatibility"""
+        status = self.sleep_scheduler.get_status()
+        status["energy"] = self.energy
+        return status
