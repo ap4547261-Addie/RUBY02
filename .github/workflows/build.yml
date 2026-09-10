@@ -29,10 +29,11 @@ jobs:
         python-version: '3.14'
 
     - name: Setup Android NDK
-      uses: android-actions/setup-ndk@v3
+      uses: nttld/setup-ndk@v1
+      id: setup-ndk
       with:
-        ndk_version: '26.1.10909125'
-        local_cache: true
+        ndk-version: r26b
+        local-cache: true
 
     - name: Install dependencies
       run: |
@@ -56,7 +57,7 @@ jobs:
         GMAIL_CREDENTIANLS_JSON: ${{ secrets.GMAIL_CREDENTIANLS_JSON }}
         GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
         FLET_SUPPRESS_PROMPTS: "true"
-        CMAKE_ARGS: "-DCMAKE_TOOLCHAIN_FILE=${{ env.ANDROID_NDK_HOME }}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24"
+        CMAKE_ARGS: "-DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24"
       run: |
         if [ -n "$GMAIL_CREDENTIANLS_JSON" ]; then
           echo "$GMAIL_CREDENTIANLS_JSON" > credentials.json
