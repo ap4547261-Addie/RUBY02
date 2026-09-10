@@ -50,6 +50,11 @@ jobs:
     - name: Accept Android Licenses
       run: yes | flutter doctor --android-licenses || true
 
+    - name: Download TinyLlama GGUF Model
+      run: |
+        mkdir -p assets/
+        curl -L -o assets/tinyllama.gguf "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+
     - name: Build APK with Cross-Compiled Llama-Cpp
       env:
         PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
