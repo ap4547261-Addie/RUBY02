@@ -238,6 +238,34 @@ class BrainRouter:
 
         return None
 
+    def _generate_local_fallback(self, user_msg: str) -> str:
+        """Generates dynamic in-character responses when offline without needing Ollama."""
+        msg_lower = user_msg.lower().strip()
+        
+        if any(g in msg_lower for g in ["hi", "hyy", "hello", "hey", "sup"]):
+            responses = [
+                "Hey... took you long enough to say something.",
+                "Hyy yourself. What do you want now?",
+                "Oh, you're back. Don't act all excited to see me or anything."
+            ]
+        elif "who are you" in msg_lower or "your name" in msg_lower:
+            responses = [
+                "I'm Ruby. Your favorite psychologist-in-training, whether you admit it or not.",
+                "Seriously? You're asking me that? I'm Ruby, 5'7, orange-golden hair, and definitely out of your league."
+            ]
+        elif "?" in user_msg:
+            responses = [
+                f"You're full of questions today about '{user_msg}'. Care to figure it out yourself?",
+                "Why are you psychoanalyzing me with questions right now? Turn it around."
+            ]
+        else:
+            responses = [
+                f"I heard '{user_msg}', but honestly my mind's wandering somewhere else right now...",
+                "Hmm. Say something more interesting than that, Addie.",
+                "You say the randomest things sometimes. What's actually on your mind?"
+            ]
+        return random.choice(responses)
+
     def route_request(self, messages, personality=None, user_id=None):
         uid = user_id if user_id else self.user_id
 
@@ -256,7 +284,7 @@ class BrainRouter:
         if local_answer is not None:
             return {"source": "local_brain", "response": local_answer}
 
-        # 2. HTTP call to local Ollama server using Ruby's full persona profile
+        # 2. HTTP call to local Ollama server if running
         if last_user_msg:
             try:
                 sys_prompt = personality or RUBY_PROMPT
@@ -274,16 +302,18 @@ class BrainRouter:
                     headers={"Content-Type": "application/json"},
                     method="POST"
                 )
-                with urllib.request.urlopen(req, timeout=10) as response:
+                with urllib.request.urlopen(req, timeout=3) as response:
                     res_body = json.loads(response.read().decode("utf-8"))
                     response_text = res_body.get("response", "").strip()
                     if response_text:
                         return {"source": "local_ollama", "response": response_text}
-            except Exception as e:
-                print(f"Ollama HTTP error: {e}")
+            except Exception:
+                pass  # Ollama not running; silently fallback to local personality generator
 
-        # 3. Clean fallback if local execution fails entirely
-        return {"source": "fallback", "response": f"I heard you say '{last_user_msg}', but my local server isn't responding right now, Addie!"}
+        # 3. Intelligent local fallback (keeps Ruby in character without throwing server errors)
+        fallback_text = self._generate_local_fallback(last_user_msg or "")
+        return {"source": "fallback", "response": fallback_text}
 
     def get_energy_status(self):
         return self.energy.get_energy_status()
+
