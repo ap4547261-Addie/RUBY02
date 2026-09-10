@@ -3,6 +3,7 @@ import os
 import json
 import asyncio
 import threading
+import urllib.request
 import flet as ft
 from datetime import datetime
 import config
@@ -20,9 +21,33 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT
 
 # ============================================
+# 0. PERSISTENT STORAGE SETUP & MODEL DOWNLOADER
+# ============================================
+STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
+os.makedirs(STORAGE_DIR, exist_ok=True)
+
+MODEL_FILENAME = "tinyllama.gguf"
+MODEL_PATH = os.path.join(STORAGE_DIR, MODEL_FILENAME)
+
+def ensure_model_exists():
+    """Download TinyLlama automatically on first launch if not present in app storage"""
+    if not os.path.exists(MODEL_PATH):
+        print("📥 Model not found in app storage. Downloading TinyLlama (638 MB)...")
+        url = "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+        try:
+            urllib.request.urlretrieve(url, MODEL_PATH)
+            print("✅ TinyLlama download complete!")
+        except Exception as e:
+            print(f"❌ Failed to download model: {e}")
+    else:
+        print(f"✅ TinyLlama model found at {MODEL_PATH}")
+
+ensure_model_exists()
+
+# ============================================
 # 1. INITIALIZE CORE BRAIN MODULES
 # ============================================
-router = BrainRouter(model_path="tinyllama.gguf")
+router = BrainRouter(model_path=MODEL_PATH)
 brain_core = RubyBrainCore()
 
 # ============================================
@@ -32,7 +57,7 @@ PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", getattr(config, "PINECONE_API_K
 PINECONE_INDEX_HOST = os.getenv("PINECONE_INDEX_HOST", getattr(config, "PINECONE_INDEX_HOST", ""))
 
 hybrid_memory = HybridMemorySystem(
-    sqlite_path="ruby_memory.db",
+    sqlite_path=os.path.join(STORAGE_DIR, "ruby_memory.db"),
     pinecone_api_key=PINECONE_API_KEY if PINECONE_API_KEY else None,
     index_host=PINECONE_INDEX_HOST if PINECONE_INDEX_HOST else None
 )
@@ -41,8 +66,7 @@ print(f"☁️ Hybrid Memory System initialized (Pinecone status: {'Connected' i
 # ============================================
 # 3. INITIALIZE LEARNING SYSTEMS
 # ============================================
-
-data_ingestion = DataIngestion(db_path="ruby_knowledge.db")
+data_ingestion = DataIngestion(db_path=os.path.join(STORAGE_DIR, "ruby_knowledge.db"))
 print("📚 DataIngestion initialized")
 
 web_learner = WebLearner(data_ingestion)
@@ -57,7 +81,6 @@ print("📸 Instagram Connector initialized")
 # ============================================
 # 4. INITIALIZE RUBY ENGINE
 # ============================================
-
 ruby_engine = RubyEngine(
     memory=hybrid_memory,
     knowledge=data_ingestion,
@@ -71,7 +94,6 @@ print("🧠 RubyEngine initialized!")
 # ============================================
 # 5. INITIALIZE WEBSOCKET SERVER
 # ============================================
-
 websocket_handler = WebSocketHandler(
     hybrid_memory,
     data_ingestion,
@@ -82,16 +104,13 @@ websocket_handler = WebSocketHandler(
 print("🔌 WebSocketHandler initialized")
 
 def start_websocket_server():
-    """Start Ruby's WebSocket server with handler"""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-
     server = RubyWebSocketServer(
         handler=websocket_handler,
         host="localhost",
         port=8765
     )
-
     try:
         loop.run_until_complete(server.start_server())
     except Exception as e:
@@ -104,24 +123,15 @@ ws_thread.start()
 print("🔌 WebSocket server running on ws://localhost:8765")
 
 # ============================================
-# 6. PERSISTENT STORAGE - CHAT HISTORY
+# 6. PERSISTENT STORAGE - GMAIL TOKEN & HISTORY
 # ============================================
-STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
-os.makedirs(STORAGE_DIR, exist_ok=True)
-
 token_source = "token_gmail.pickle"
 token_dest = os.path.join(STORAGE_DIR, "token_gmail.pickle")
 if os.path.exists(token_source) and not os.path.exists(token_dest):
     import shutil
     shutil.copy(token_source, token_dest)
-    print(f"✅ token_gmail.pickle copied from {token_source} to {token_dest}")
-elif os.path.exists(token_dest):
-    print(f"✅ token_gmail.pickle already exists at {token_dest}")
-else:
-    print("❌ token_gmail.pickle not found in APK – Gmail backup will fail.")
+    print(f"✅ token_gmail.pickle copied to {token_dest}")
 
-MEMORY_DB = os.path.join(STORAGE_DIR, "ruby_memory.db")
-KNOWLEDGE_DB = os.path.join(STORAGE_DIR, "ruby_knowledge.db")
 HISTORY_FILE = os.path.join(STORAGE_DIR, "ruby_chat_history.json")
 
 def load_chat_history():
@@ -143,7 +153,6 @@ def save_chat_history():
 # ============================================
 # 7. RUBY'S PERSONALITY PROMPT
 # ============================================
-
 today = datetime.now()
 birth_year = 2004
 birth_month = 8
@@ -156,7 +165,6 @@ if (today.month, today.day) < (birth_month, birth_day):
 interaction_depth = hybrid_memory.get_interaction_count()
 
 def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
-    """Constructs Ruby's dynamic system prompt injecting live interaction depth and stored memories."""
     today = datetime.now()
     age = today.year - 2004 - ((today.month, today.day) < (8, 16))
 
@@ -198,27 +206,19 @@ def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
     )
 
 RUBY_PROMPT = build_ruby_prompt(interaction_depth=0)
-
 conversation_history = []
 
 # ============================================
-# 8. UI STATE
+# 8. UI STATE & FUNCTIONS
 # ============================================
-
 ui_page_ref = None
 chat_list_ref = None
 status_label_ref = None
 
-# ============================================
-# 9. UI FUNCTIONS
-# ============================================
-
 def update_ruby_status():
-    """Update Ruby's status display with her current energy and mood"""
     if status_label_ref and ui_page_ref:
         try:
             status = router.energy.get_energy_status()
-
             if router.energy.is_sleeping:
                 if router.energy.sleep_until:
                     remaining = router.energy.sleep_until - datetime.now()
@@ -232,10 +232,8 @@ def update_ruby_status():
                 emoji = status.get("emoji", "✨")
                 remaining = status.get("remaining", 0)
                 status_label_ref.value = f"{emoji} {energy_percent}% - {status.get('message', 'Awake')}"
-
                 if remaining > 0:
                     status_label_ref.value += f" ({remaining} left)"
-
             ui_page_ref.update()
         except Exception as e:
             print(f"Status update error: {e}")
@@ -246,12 +244,10 @@ def add_message(sender, text, is_user=False, image_path=None):
             ft.Text(sender, size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.AMBER_400 if is_user else ft.Colors.CYAN_400),
             ft.Text(text, size=14, color=ft.Colors.WHITE)
         ]
-
         if image_path and os.path.exists(image_path):
             controls_list.append(
                 ft.Image(src=image_path, width=256, height=256, border_radius=8, fit=ft.BoxFit.CONTAIN)
             )
-
         bubble = ft.Container(
             content=ft.Column(controls_list, spacing=6),
             bgcolor="#1E1E24" if not is_user else "#2A2A36",
@@ -261,16 +257,10 @@ def add_message(sender, text, is_user=False, image_path=None):
         chat_list_ref.controls.append(bubble)
         ui_page_ref.update()
 
-# ============================================
-# 10. WEB SEARCH AND LEARNING
-# ============================================
-
 def search_and_learn(query: str) -> str:
-    """Search the web and learn from results"""
     try:
         web_learner_local = WebLearner(data_ingestion)
         result = web_learner_local.search_web_and_learn(query)
-
         if result.get("success"):
             knowledge = data_ingestion.search_knowledge(query, limit=3)
             if knowledge:
@@ -284,10 +274,6 @@ def search_and_learn(query: str) -> str:
             return f"🤔 I couldn't find much about '{query}'. Try a different topic!"
     except Exception as e:
         return f"❌ Search error: {str(e)}"
-
-# ============================================
-# 11. MAIN UI
-# ============================================
 
 def main_app_ui(page: ft.Page):
     global ui_page_ref, chat_list_ref, conversation_history, status_label_ref
@@ -356,7 +342,7 @@ def main_app_ui(page: ft.Page):
                     update_ruby_status()
                     return
 
-            current_depth = hybrid_memory.increment_interaction()
+            hybrid_memory.increment_interaction()
 
             learn_keywords = ["learn about", "search for", "find out", "look up", "research", "teach me about"]
             is_learn_request = any(keyword in text.lower() for keyword in learn_keywords)
@@ -467,20 +453,5 @@ def main_app_ui(page: ft.Page):
     update_ruby_status()
     page.update()
 
-# ============================================
-# 12. STARTUP
-# ============================================
-
 if __name__ == "__main__":
-    print("=" * 50)
-    print("🧠 RUBY'S BRAIN - COMPLETE SYSTEM (WITH PINECONE)")
-    print("=" * 50)
-    print(f"📚 Memory DB: ruby_memory.db")
-    print(f"📖 Knowledge DB: ruby_knowledge.db")
-    print(f"🔌 WebSocket: ws://localhost:8765")
-    print("=" * 50)
-    print("✅ All systems initialized with cloud Pinecone integration")
-    print("📡 Waiting for browser extension connection...")
-    print("=" * 50)
-
     ft.run(main=main_app_ui, view=ft.AppView.WEB_BROWSER, host="127.0.0.1", port=8550)
