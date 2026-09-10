@@ -4,12 +4,10 @@
 
 import os
 import json
-import time
 import threading
 import urllib.request
-from datetime import datetime, timedelta
 import random
-from tools.profile import ConversationProfile
+from datetime import datetime, timedelta
 
 try:
     import config
@@ -189,7 +187,6 @@ class BrainRouter:
         self.sleep_scheduler = self.energy._sleep_scheduler
         self.local_model = local_model
         self.ollama_url = ollama_url
-        self.profile = ConversationProfile()
         self.user_id = user_id
         print("🧠 100% Offline BrainRouter initialized!")
 
@@ -236,6 +233,36 @@ class BrainRouter:
 
         return None
 
+    def _get_in_character_fallback(self, user_msg):
+        """Dynamic persona fallback if local Ollama HTTP is down."""
+        msg_lower = user_msg.lower() if user_msg else ""
+        
+        if any(w in msg_lower for w in ["hi", "hyy", "hello", "hey"]):
+            options = [
+                "Hyy? Took you long enough to say something. What's on your mind?",
+                "Oh, you're finally talking to me, Addie. Don't expect me to be too excited.",
+                "Hey. I was actually enjoying the quiet, but go ahead."
+            ]
+        elif any(w in msg_lower for w in ["ok", "fine", "you okay", "how are you"]):
+            options = [
+                "I'm fine. Just processing my thoughts. Why do you ask?",
+                "Surviving. What are you up to?",
+                "Never better. What's on your mind before I get distracted?"
+            ]
+        elif "?" in user_msg:
+            options = [
+                f"You're asking a lot about '{user_msg}'. What do you think?",
+                "Why are you quizzing me right now?",
+                "That's an interesting question. Let me think about that."
+            ]
+        else:
+            options = [
+                f"You really just said '{user_msg}'? Tell me more.",
+                "I heard you, but give me a second to reply properly.",
+                "Say something interesting, Addie!"
+            ]
+        return random.choice(options)
+
     def route_request(self, messages, personality=None, user_id=None):
         uid = user_id if user_id else self.user_id
 
@@ -254,10 +281,10 @@ class BrainRouter:
         if local_answer is not None:
             return {"source": "local_brain", "response": local_answer}
 
-        # 2. Use HTTP API to talk to local Ollama (Android & Termux compatible)
+        # 2. HTTP call to local Ollama server (Android-compatible)
         if last_user_msg:
             try:
-                sys_prompt = personality or "You are Ruby, a sassy, emotional girl with orange hair."
+                sys_prompt = personality or "You are Ruby, a sassy, emotional girl."
                 prompt = f"{sys_prompt}\n\nUser: {last_user_msg}\nRuby:"
                 
                 payload = {
@@ -272,16 +299,17 @@ class BrainRouter:
                     headers={"Content-Type": "application/json"},
                     method="POST"
                 )
-                with urllib.request.urlopen(req, timeout=20) as response:
+                with urllib.request.urlopen(req, timeout=10) as response:
                     res_body = json.loads(response.read().decode("utf-8"))
                     response_text = res_body.get("response", "").strip()
                     if response_text:
                         return {"source": "local_ollama", "response": response_text}
             except Exception as e:
-                print(f"Local Ollama HTTP connection error: {e}")
+                print(f"Ollama HTTP error: {e}")
 
-        # 3. Final fallback if local execution fails entirely
-        return {"source": "fallback", "response": f"Ugh, my local model didn't respond, Addie. You said: '{last_user_msg}'?"}
+        # 3. Dynamic in-character fallback response
+        fallback_reply = self._get_in_character_fallback(last_user_msg)
+        return {"source": "fallback", "response": fallback_reply}
 
     def get_energy_status(self):
         return self.energy.get_energy_status()
