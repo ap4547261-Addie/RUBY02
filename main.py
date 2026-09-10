@@ -23,10 +23,8 @@ from personality.ruby import RUBY_PROMPT
 # ============================================
 # 1. INITIALIZE CORE BRAIN MODULES
 # ============================================
-
-router = BrainRouter(cloud_api_key=getattr(config, "GEMINI_API_KEY", None))
-brain_core = RubyBrainCore(api_key=getattr(config, "GEMINI_API_KEY", None))
-
+router = BrainRouter(local_model="tinyllama")
+brain_core = RubyBrainCore()
 # ============================================
 # 2. INITIALIZE LOCAL MEMORY SYSTEM
 # ============================================
