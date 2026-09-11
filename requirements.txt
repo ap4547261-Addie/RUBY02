@@ -6,4 +6,3 @@ lxml>=4.9.0
 websockets>=12.0
 pillow>=10.0.0
 pinecone-client>=3.0.0
-webview_flutter_android==4.9.0
