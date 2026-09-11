@@ -1,7 +1,3 @@
-# =====================================================================
-# engine/router.py – Ruby's Native Llama-Cpp Brain Router & Sleep Scheduler
-# =====================================================================
-
 import os
 import json
 import threading
@@ -130,87 +126,43 @@ class RubySleepScheduler:
             }
 
 
-class EnergyManager:
-    """Manages Ruby's energy and sleep integration for UI compatibility"""
-    def __init__(self):
-        self._energy_val = 100
-        self.is_sleeping = False
-        self.sleep_until = None
-        self._sleep_scheduler = RubySleepScheduler()
-
-    def __int__(self):
-        return self._energy_val
-
-    def __index__(self):
-        return self._energy_val
-
-    def __eq__(self, other):
-        return self._energy_val == other
-
-    def __gt__(self, other):
-        return self._energy_val > other
-
-    def __lt__(self, other):
-        return self._energy_val < other
-
-    def __ge__(self, other):
-        return self._energy_val >= other
-
-    def __le__(self, other):
-        return self._energy_val <= other
-
-    def __str__(self):
-        return str(self._energy_val)
-
-    def __repr__(self):
-        return str(self._energy_val)
-
-    def is_available(self):
-        if self._sleep_scheduler.should_sleep_now():
-            self._go_to_sleep()
-        if self.is_sleeping:
-            if self._sleep_scheduler.check_wake_up():
-                self._wake_up()
-        return not self.is_sleeping
-
-    def _go_to_sleep(self):
-        self.is_sleeping = True
-        self._sleep_scheduler.start_daily_sleep()
-        self.sleep_until = self._sleep_scheduler.sleep_until
-
-    def _wake_up(self):
-        self.is_sleeping = False
-        self.sleep_until = None
-        self._sleep_scheduler._wake_up()
-
-    def get_energy_status(self):
-        status = self._sleep_scheduler.get_status()
-        status["energy"] = self._energy_val
-        return status
-
-
 class BrainRouter:
     def __init__(self, model_path="tinyllama.gguf", user_id="default_user"):
-        self.energy = EnergyManager()
-        self.sleep_scheduler = self.energy._sleep_scheduler
+        self.sleep_scheduler = RubySleepScheduler()
         self.user_id = user_id
         self.model = None
 
-        if Llama is not None and os.path.exists(model_path):
+        # Resolve model path safely across application paths and local fallbacks
+        resolved_model_path = model_path
+        if not os.path.exists(resolved_model_path):
+            local_candidates = [
+                model_path,
+                "tinyllama.gguf",
+                "assets/tinyllama.gguf",
+                os.path.join(os.getenv("FLET_APP_STORAGE_DATA", "."), "tinyllama.gguf")
+            ]
+            for candidate in local_candidates:
+                if candidate and os.path.exists(candidate):
+                    resolved_model_path = candidate
+                    break
+
+        if Llama is not None and os.path.exists(resolved_model_path):
             try:
-                print(f"🧠 Loading native model from {model_path}...")
+                print(f"🧠 Loading native model from {resolved_model_path}...")
                 self.model = Llama(
-                    model_path=model_path,
+                    model_path=resolved_model_path,
                     n_ctx=512,          # Optimized context window to prevent CPU choking on mobile
                     n_threads=4,        # Restrict CPU threads to avoid maxing out mobile cores
                     n_batch=128,        # Smaller batch size for faster token processing
-                    verbose=False
+                    verbose=True
                 )
                 print("✨ Native model loaded successfully!")
             except Exception as e:
-                print(f"Failed to load native model weights: {e}")
+                import traceback
+                print(f"❌ Failed to load native model weights: {e}")
+                traceback.print_exc()
         else:
-            print(f"⚠️ Warning: llama_cpp package not found or model file '{model_path}' missing.")
+            print(f"⚠️ Warning: llama_cpp package not found or model file not found at: {os.path.abspath(resolved_model_path)}")
 
     def _call_local_brain(self, messages):
         try:
@@ -266,9 +218,13 @@ class BrainRouter:
     def route_request(self, messages, personality=None, user_id=None):
         uid = user_id if user_id else self.user_id
 
-        if not self.energy.is_available():
-            status = self.energy.get_energy_status()
-            return {"source": "sleeping", "response": status["message"]}
+        # Handle midnight sleep check
+        if self.sleep_scheduler.should_sleep_now():
+            self.sleep_scheduler.start_daily_sleep()
+        if self.sleep_scheduler.is_sleeping:
+            if not self.sleep_scheduler.check_wake_up():
+                status = self.sleep_scheduler.get_status()
+                return {"source": "sleeping", "response": status["message"]}
 
         last_user_msg = None
         for msg in reversed(messages):
@@ -305,4 +261,4 @@ class BrainRouter:
         return {"source": "fallback", "response": fallback_text}
 
     def get_energy_status(self):
-        return self.energy.get_energy_status()
+        return self.sleep_scheduler.get_status()
