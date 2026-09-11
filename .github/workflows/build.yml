@@ -2,7 +2,7 @@ name: Build Flet APK
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -10,74 +10,113 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Free Up Disk Space
-      run: |
-        sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
-        df -h
+      - name: Free Up Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h
 
-    - name: Install Linux Desktop Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libgtk-3-dev mesa-utils cmake build-essential
+      - name: Install Linux Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            mesa-utils \
+            cmake \
+            ninja-build \
+            build-essential
 
-    - name: Set up Python 3.14
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.14'
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-    - name: Setup Android NDK
-      uses: nttld/setup-ndk@v1
-      id: setup-ndk
-      with:
-        ndk-version: r26b
-        local-cache: true
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26b
+          local-cache: true
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install flet
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.3"
+          cache: true
 
-    - name: Set up Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.24.3'
-        cache: true
+      - name: Accept Android Licenses
+        run: |
+          yes | flutter doctor --android-licenses || true
 
-    - name: Accept Android Licenses
-      run: yes | flutter doctor --android-licenses || true
+      - name: Download TinyLlama
+        run: |
+          mkdir -p assets
 
-    - name: Download TinyLlama GGUF Model
-      run: |
-        mkdir -p assets/
-        curl -L -o assets/tinyllama.gguf "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+          curl -L --fail --retry 3 \
+            -o assets/tinyllama.gguf \
+            "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
 
-    - name: Build APK with Cross-Compiled Llama-Cpp
-      env:
-        PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
-        PINECONE_INDEX_HOST: ${{ secrets.PINECONE_INDEX_HOST }}
-        GMAIL_CREDENTIANLS_JSON: ${{ secrets.GMAIL_CREDENTIANLS_JSON }}
-        GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
-        FLET_SUPPRESS_PROMPTS: "true"
-        CMAKE_ARGS: "-DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24"
-      run: |
-        if [ -n "$GMAIL_CREDENTIANLS_JSON" ]; then
-          echo "$GMAIL_CREDENTIANLS_JSON" > credentials.json
-        fi
-        if [ -n "$GCLOUD_SERVICE_ACCOUNT_JSON" ]; then
-          echo "$GCLOUD_SERVICE_ACCOUNT_JSON" > service_account.json
-        fi
+          echo "TinyLlama downloaded:"
+          ls -lh assets/tinyllama.gguf
 
-        rm -rf build/ dist/ __pycache__/
-        flet build apk --python-version 3.14 --arch arm64-v8a --yes --verbose
+          test -s assets/tinyllama.gguf
 
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ruby-apk
-        path: |
-          build/**/*.apk
-          **/app-*.apk
+      - name: Install Python Dependencies
+        env:
+          CMAKE_ARGS: >-
+            -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake
+            -DANDROID_ABI=arm64-v8a
+            -DANDROID_PLATFORM=android-24
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+
+      - name: Verify llama-cpp-python
+        run: |
+          python -c "from llama_cpp import Llama; print('llama_cpp import OK')"
+
+      - name: Verify Project
+        run: |
+          python -m compileall engine tools personality main.py
+
+      - name: Build APK
+        env:
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          PINECONE_INDEX_HOST: ${{ secrets.PINECONE_INDEX_HOST }}
+          GMAIL_CREDENTIANLS_JSON: ${{ secrets.GMAIL_CREDENTIANLS_JSON }}
+          GCLOUD_SERVICE_ACCOUNT_JSON: ${{ secrets.GCLOUD_SERVICE_ACCOUNT_JSON }}
+          FLET_SUPPRESS_PROMPTS: "true"
+          CMAKE_ARGS: >-
+            -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup-ndk.outputs.ndk-path }}/build/cmake/android.toolchain.cmake
+            -DANDROID_ABI=arm64-v8a
+            -DANDROID_PLATFORM=android-24
+        run: |
+          if [ -n "$GMAIL_CREDENTIANLS_JSON" ]; then
+            echo "$GMAIL_CREDENTIANLS_JSON" > credentials.json
+          fi
+
+          if [ -n "$GCLOUD_SERVICE_ACCOUNT_JSON" ]; then
+            echo "$GCLOUD_SERVICE_ACCOUNT_JSON" > service_account.json
+          fi
+
+          rm -rf build/ dist/ __pycache__/
+
+          flet build apk \
+            --python-version 3.12 \
+            --arch arm64-v8a \
+            --yes \
+            --verbose
+
+      - name: Verify APK
+        run: |
+          find build -type f -name "*.apk" -print
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruby-apk
+          path: |
+            build/**/*.apk
+            **/app-*.apk
