@@ -1,5 +1,5 @@
-flet>=0.25.0
-llama-cpp-python>=0.2.80
+flet==0.26.0
+llama-cpp-python==0.3.7
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
