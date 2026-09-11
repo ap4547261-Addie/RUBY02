@@ -3,8 +3,6 @@ import os
 import json
 import asyncio
 import threading
-import urllib.request
-import ssl
 import flet as ft
 from datetime import datetime
 import config
@@ -22,7 +20,7 @@ from tools.websocket_server import RubyWebSocketServer
 from personality.ruby import RUBY_PROMPT
 
 # ============================================
-# 0. PERSISTENT STORAGE SETUP & MODEL DOWNLOADER
+# 0. PERSISTENT STORAGE SETUP & MODEL PATH
 # ============================================
 STORAGE_DIR = os.getenv("FLET_APP_STORAGE_DATA", ".")
 os.makedirs(STORAGE_DIR, exist_ok=True)
@@ -30,55 +28,12 @@ os.makedirs(STORAGE_DIR, exist_ok=True)
 MODEL_FILENAME = "tinyllama.gguf"
 MODEL_PATH = os.path.join(STORAGE_DIR, MODEL_FILENAME)
 
-def ensure_model_exists(page_ref=None, status_ref=None):
-    """Download TinyLlama automatically in a background thread on first launch with SSL bypass"""
-    if os.path.exists(MODEL_PATH):
-        file_size_mb = os.path.getsize(MODEL_PATH) / (1024 * 1024)
-        if file_size_mb > 600:
-            print(f"✅ TinyLlama model found at {MODEL_PATH} ({file_size_mb:.2f} MB)")
-            if status_ref and page_ref:
-                status_ref.value = "✨ Ready to chat!"
-                page_ref.update()
-            return True
-        else:
-            print(f"⚠️ Incomplete model found ({file_size_mb:.2f} MB). Re-downloading...")
-            os.remove(MODEL_PATH)
-
-    def download_worker():
-        print("📥 Model not found in app storage. Downloading TinyLlama (638 MB)...")
-        if status_ref and page_ref:
-            status_ref.value = "📥 Downloading local model (638 MB)..."
-            page_ref.update()
-
-        url = "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
-        
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, context=ctx) as response, open(MODEL_PATH, 'wb') as out_file:
-                while True:
-                    chunk = response.read(8192)
-                    if not chunk:
-                        break
-                    out_file.write(chunk)
-
-            print("✅ TinyLlama download complete!")
-            if status_ref and page_ref:
-                status_ref.value = "✨ Ready to chat!"
-                page_ref.update()
-        except Exception as e:
-            import traceback
-            print(f"❌ Failed to download model: {e}")
-            traceback.print_exc()
-            if status_ref and page_ref:
-                status_ref.value = "❌ Model download failed."
-                page_ref.update()
-
-    threading.Thread(target=download_worker, daemon=True).start()
-    return False
+# Locate pre-bundled model from build or local assets if not directly in storage
+if not os.path.exists(MODEL_PATH):
+    for candidate in [MODEL_FILENAME, "assets/tinyllama.gguf", os.path.join("assets", MODEL_FILENAME)]:
+        if os.path.exists(candidate):
+            MODEL_PATH = candidate
+            break
 
 # ============================================
 # 1. INITIALIZE CORE BRAIN MODULES
@@ -241,7 +196,7 @@ def build_ruby_prompt(interaction_depth: int, user_memories: str = "") -> str:
         "8. Spontaneous Image Generation: If you feel like randomly sending a selfie or showing a vibe on your own whim, append [GENERATE_IMAGE: exact visual prompt description] at the end. Never wait for permission."
     )
 
-RUBY_PROMPT = build_ruby_prompt(interaction_depth=0)
+RUBY_PROMPT = build_ruby_prompt(interaction_depth=interaction_depth)
 conversation_history = []
 
 # ============================================
@@ -254,22 +209,17 @@ status_label_ref = None
 def update_ruby_status():
     if status_label_ref and ui_page_ref:
         try:
-            status = router.energy.get_energy_status()
-            if router.energy.is_sleeping:
-                if router.energy.sleep_until:
-                    remaining = router.energy.sleep_until - datetime.now()
-                    hours = remaining.seconds // 3600
-                    minutes = (remaining.seconds % 3600) // 60
-                    status_label_ref.value = f"💤 Sleeping... {hours}h {minutes}m remaining"
+            status = router.get_energy_status()
+            if router.sleep_scheduler.is_sleeping:
+                if router.sleep_scheduler.sleep_until:
+                    remaining = router.sleep_scheduler.sleep_until - datetime.now()
+                    minutes = max(0, int(remaining.total_seconds() / 60))
+                    status_label_ref.value = f"💤 Sleeping (midnight sync)... {minutes}m remaining"
                 else:
-                    status_label_ref.value = "💤 Sleeping..."
+                    status_label_ref.value = "💤 Sleeping (midnight sync)..."
             else:
-                energy_percent = int(status.get("energy", 100))
                 emoji = status.get("emoji", "✨")
-                remaining = status.get("remaining", 0)
-                status_label_ref.value = f"{emoji} {energy_percent}% - {status.get('message', 'Awake')}"
-                if remaining > 0:
-                    status_label_ref.value += f" ({remaining} left)"
+                status_label_ref.value = f"{emoji} {status.get('message', 'Ready to chat!')}"
             ui_page_ref.update()
         except Exception as e:
             print(f"Status update error: {e}")
@@ -341,15 +291,12 @@ def main_app_ui(page: ft.Page):
         chat_list.controls.append(bubble)
 
     status_label = ft.Text(
-        "✨ Checking status...",
+        "✨ Ready to chat!",
         size=11,
         color=ft.Colors.GREY_400,
         weight=ft.FontWeight.NORMAL
     )
     status_label_ref = status_label
-
-    # Trigger background model download safely inside UI startup without ANR freezing
-    ensure_model_exists(page_ref=page, status_ref=status_label)
 
     user_input = ft.TextField(
         hint_text="Say something to Ruby or ask her to draw...", 
@@ -363,21 +310,13 @@ def main_app_ui(page: ft.Page):
 
     def process_generation(text):
         try:
-            if not router.energy.is_available():
-                if router.energy.is_sleeping:
-                    if router.energy.sleep_until and datetime.now() < router.energy.sleep_until:
-                        add_message("Ruby", "I'm sleeping... Talk to me tomorrow! 💤")
-                        return
-                    else:
-                        router.energy._wake_up()
-                        wake_msg = router.energy.get_wake_message()
-                        add_message("Ruby", f"{wake_msg}\n\nWhat did I miss?")
-                        update_ruby_status()
-                        return
-
-                if not router.energy.is_available():
-                    router.energy._go_to_sleep()
-                    add_message("Ruby", router.energy.get_sleep_message())
+            # Check midnight sleep scheduler
+            if router.sleep_scheduler.should_sleep_now():
+                router.sleep_scheduler.start_daily_sleep()
+            if router.sleep_scheduler.is_sleeping:
+                if not router.sleep_scheduler.check_wake_up():
+                    status = router.sleep_scheduler.get_status()
+                    add_message("Ruby", status["message"])
                     update_ruby_status()
                     return
 
@@ -403,11 +342,11 @@ def main_app_ui(page: ft.Page):
                     save_chat_history()
                     return
 
-            reply = ruby_engine.think(text)
+            reply_data = router.route_request(conversation_history + [{"role": "user", "content": text}], personality=RUBY_PROMPT)
+            reply = reply_data.get("response", "...")
 
-            if router.energy.is_sleeping:
+            if reply_data.get("source") == "sleeping":
                 add_message("Ruby", reply)
-                add_message("Ruby", f"\n💤 {router.energy.get_sleep_message()}")
                 update_ruby_status()
                 return
 
@@ -444,53 +383,36 @@ def main_app_ui(page: ft.Page):
             add_message("Ruby", reply, image_path=generated_img_path)
             update_ruby_status()
 
-            status = router.energy.get_energy_status()
-            if status.get("energy", 100) < 20:
-                add_message("Ruby", "\nUgh, I'm getting really tired... Might need to sleep soon. 😴")
+        except Exception as e:
+            print(f"Generation error: {e}")
+            add_message("Ruby", f"Ugh, my brain lagged for a second... What were we saying?")
 
-        except Exception as ex:
-            error_msg = f"Ugh, connection dropped... ({str(ex)})"
-            add_message("Ruby", error_msg)
-            print(f"Error: {ex}")
-
-    def send_click(e):
+    def on_submit(e):
         text = user_input.value.strip()
         if not text:
             return
+        user_input.value = ""
+        user_input.update()
 
         add_message("Addie", text, is_user=True)
-        user_input.value = ""
-        user_input.focus()
-        page.update()
-
         threading.Thread(target=process_generation, args=(text,), daemon=True).start()
 
-    send_btn = ft.IconButton(
+    user_input.on_submit = on_submit
+    send_button = ft.IconButton(
         icon=ft.Icons.SEND_ROUNDED,
         icon_color=ft.Colors.CYAN_400,
-        on_click=send_click,
+        on_click=on_submit
     )
 
-    input_row = ft.Row([user_input, send_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-
-    header = ft.Container(
-        content=ft.Row([
-            ft.Text("RUBY // GENIUS HUMAN CORE", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_500),
-            status_label
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-        padding=5
-    )
+    input_row = ft.Row([user_input, send_button], spacing=8)
 
     page.add(
-        ft.Column([
-            header,
-            chat_list,
-            input_row
-        ], expand=True)
+        status_label,
+        ft.Divider(height=1, color="#2A2A36"),
+        chat_list,
+        input_row
     )
-
     update_ruby_status()
-    page.update()
 
 if __name__ == "__main__":
-    ft.run(main=main_app_ui, view=ft.AppView.WEB_BROWSER, host="127.0.0.1", port=8550)
+    ft.app(target=main_app_ui)
