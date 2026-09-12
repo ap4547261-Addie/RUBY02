@@ -328,8 +328,14 @@ def build_ruby_prompt(
         )
     )
 
-    return (
+    memories_text = (
+        user_memories
+        if user_memories
+        else "No specific prior memories loaded yet. "
+             "Build continuity as you chat."
+    )
 
+    return (
         f"Name: Ruby | "
         f"Gender: Female "
         f"(Human from a parallel world) | "
@@ -394,9 +400,7 @@ def build_ruby_prompt(
 
         "ESTABLISHED MEMORIES & CONTINUITY:\n"
 
-        f"{user_memories if user_memories else "
-        "'No specific prior memories loaded yet. "
-        "Build continuity as you chat.'}\n\n"
+        f"{memories_text}\n\n"
 
         "PERSONAL DEVELOPMENT:\n"
 
@@ -474,7 +478,6 @@ def build_ruby_prompt(
         "or showing a vibe on your own whim, append "
         "[GENERATE_IMAGE: exact visual prompt "
         "description] at the end. Never wait for permission."
-
     )
 
 
