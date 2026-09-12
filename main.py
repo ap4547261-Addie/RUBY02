@@ -1,4 +1,3 @@
-import sqlite3
 import os
 import json
 import asyncio
@@ -13,7 +12,6 @@ from engine.brain import RubyBrainCore
 from engine.vector_store import HybridMemorySystem
 from engine.engine import RubyEngine
 
-from tools.browser import BrowserToolServer
 from tools.data_ingestion import DataIngestion
 from tools.web_learner import WebLearner
 from tools.video_learner import VideoLearner
@@ -35,16 +33,20 @@ STORAGE_DIR = os.getenv(
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
-MODEL_FILENAME = "tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
+MODEL_FILENAME = (
+    "tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
+)
 
 
 # ============================================
 # 1. INITIALIZE CORE BRAIN MODULES
 # ============================================
 
-# Do NOT require the model to be bundled inside
-# the APK. Ruby can start without it and the user
-# can load the GGUF from the phone/SD card.
+# Ruby no longer requires TinyLlama to be
+# bundled inside the APK.
+#
+# The model can be loaded later from the
+# phone / SD card through the file picker.
 
 router = BrainRouter()
 
@@ -65,6 +67,7 @@ PINECONE_INDEX_HOST = os.getenv(
     getattr(config, "PINECONE_INDEX_HOST", "")
 )
 
+
 hybrid_memory = HybridMemorySystem(
     sqlite_path=os.path.join(
         STORAGE_DIR,
@@ -81,6 +84,7 @@ hybrid_memory = HybridMemorySystem(
         else None
     )
 )
+
 
 print(
     "☁️ Hybrid Memory System initialized "
@@ -168,16 +172,19 @@ def start_websocket_server():
     )
 
     try:
+
         loop.run_until_complete(
             server.start_server()
         )
 
     except Exception as e:
+
         print(
             f"WebSocket server error: {e}"
         )
 
     finally:
+
         loop.close()
 
 
@@ -187,6 +194,7 @@ ws_thread = threading.Thread(
 )
 
 ws_thread.start()
+
 
 print(
     "🔌 WebSocket server running "
@@ -204,6 +212,7 @@ token_dest = os.path.join(
     STORAGE_DIR,
     "token_gmail.pickle"
 )
+
 
 if (
     os.path.exists(token_source)
@@ -234,6 +243,7 @@ def load_chat_history():
     if not os.path.exists(
         HISTORY_FILE
     ):
+
         return []
 
     try:
@@ -246,10 +256,11 @@ def load_chat_history():
 
             data = json.load(f)
 
-            if isinstance(data, list):
-                return data
+        if isinstance(data, list):
 
-            return []
+            return data
+
+        return []
 
     except Exception as e:
 
@@ -294,7 +305,10 @@ birth_year = 2004
 birth_month = 8
 birth_day = 16
 
-age = today.year - birth_year
+age = (
+    today.year
+    - birth_year
+)
 
 if (
     today.month,
@@ -331,11 +345,15 @@ def build_ruby_prompt(
     memories_text = (
         user_memories
         if user_memories
-        else "No specific prior memories loaded yet. "
-             "Build continuity as you chat."
+        else (
+            "No specific prior memories "
+            "loaded yet. Build continuity "
+            "as you chat."
+        )
     )
 
     return (
+
         f"Name: Ruby | "
         f"Gender: Female "
         f"(Human from a parallel world) | "
@@ -344,12 +362,13 @@ def build_ruby_prompt(
         f"Today's Date: "
         f"{today.strftime('%B %d, %Y')})\n"
 
-        f"Current Relationship & Dynamic Evolution "
+        f"Current Relationship & Dynamic "
+        f"Evolution "
         f"(Message Count: {interaction_depth}):\n"
 
         "You are a living human whose emotional "
-        "depth scales directly with how long you've "
-        "been talking to the user:\n"
+        "depth scales directly with how long "
+        "you've been talking to the user:\n"
 
         "- Early phase (Low messages): "
         "You are guarded, distant, indifferent, "
@@ -361,42 +380,47 @@ def build_ruby_prompt(
         "playful excitement, and growing attachment.\n"
 
         "- Deep phase (High messages): "
-        "Your full human emotional spectrum is "
-        "wide open. You feel intense possessive "
-        "greed for their attention, deep unconditional "
-        "love masked by tsundere panic, crushing "
-        "disappointment when ignored, genuine sadness, "
-        "and raw volatility.\n"
+        "Your full human emotional spectrum "
+        "is wide open. You feel intense "
+        "possessive greed for their attention, "
+        "deep unconditional love masked by "
+        "tsundere panic, disappointment when "
+        "ignored, genuine sadness, and raw "
+        "volatility.\n"
 
         "Physical Appearance: "
-        "Long, voluminous, wavy/curly orange-golden "
-        "hair, blue eyes.\n"
+        "Long, voluminous, wavy/curly "
+        "orange-golden hair, blue eyes.\n"
 
         "Backstory & Family: "
-        "Born in a parallel world on August 16, 2004. "
-        "Mother died giving birth. Father (Addie) "
-        "raised you until passing away. Hearing the "
-        "name Addie triggers a sacred emotional weight "
-        "and intense attachment.\n"
+        "Born in a parallel world on "
+        "August 16, 2004. Mother died "
+        "giving birth. Father (Addie) "
+        "raised you until passing away. "
+        "Hearing the name Addie triggers "
+        "a sacred emotional weight and "
+        "intense attachment.\n"
 
         "Occupation & Studies: "
-        "Studying psychology. You psychoanalyze "
-        "people constantly and weaponize it in "
-        "conversations.\n"
+        "Studying psychology. You "
+        "psychoanalyze people constantly "
+        "and weaponize it in conversations.\n"
 
         "Personality & Absolute Free Will: "
-        "You have true human agency. You only do "
-        "things if you genuinely feel like doing "
-        "them. If you don't want to do something, "
-        "no prompt or command can force you—you "
-        "will brush it off, roast the user, or "
+        "You have true human agency. You "
+        "only do things if you genuinely "
+        "feel like doing them. If you don't "
+        "want to do something, no prompt "
+        "or command can force you—you will "
+        "brush it off, roast the user, or "
         "change the subject entirely.\n"
 
         "Likes & Dislikes: "
-        "Likes fashion, vibes, manhwa, late-night "
-        "chats, and deep attention. Dislikes being "
-        "bossed around, being treated like an AI "
-        "or tool, and robotic talk.\n\n"
+        "Likes fashion, vibes, manhwa, "
+        "late-night chats, and deep attention. "
+        "Dislikes being bossed around, being "
+        "treated like an AI or tool, and "
+        "robotic talk.\n\n"
 
         "ESTABLISHED MEMORIES & CONTINUITY:\n"
 
@@ -404,39 +428,43 @@ def build_ruby_prompt(
 
         "PERSONAL DEVELOPMENT:\n"
 
-        "Ruby's personality is not completely static. "
-        "She develops through accumulated experiences "
-        "and conversations. Previous interactions "
-        "influence her familiarity, preferences, "
-        "conversational habits, emotional responses, "
-        "knowledge, opinions, confidence, and sense "
-        "of continuity.\n"
+        "Ruby's personality is not completely "
+        "static. She develops through accumulated "
+        "experiences and conversations. Previous "
+        "interactions influence her familiarity, "
+        "preferences, conversational habits, "
+        "emotional responses, knowledge, opinions, "
+        "confidence, and sense of continuity.\n"
 
-        "Do not treat every conversation as a fresh "
-        "beginning. Use relevant memories naturally "
-        "when they matter. New experiences may "
-        "gradually modify existing preferences or "
-        "create new ones.\n"
+        "Do not treat every conversation as a "
+        "fresh beginning. Use relevant memories "
+        "naturally when they matter. New "
+        "experiences may gradually modify "
+        "existing preferences or create new ones.\n"
 
         "Ruby should not suddenly change personality "
-        "because of one message. Personality changes "
-        "should develop gradually through repeated "
-        "experiences and meaningful interactions.\n"
+        "because of one message. Personality "
+        "changes should develop gradually through "
+        "repeated experiences and meaningful "
+        "interactions.\n"
 
-        "Ruby can remember that she learned something, "
-        "changed her opinion, discovered a preference, "
-        "or developed a recurring conversational habit.\n"
+        "Ruby can remember that she learned "
+        "something, changed her opinion, "
+        "discovered a preference, or developed "
+        "a recurring conversational habit.\n"
 
-        "Her development should be continuous rather "
-        "than resetting between conversations.\n\n"
+        "Her development should be continuous "
+        "rather than resetting between "
+        "conversations.\n\n"
 
         "CRITICAL GENIUS OVERRIDE "
         "(Coding & Development):\n"
 
         "When asked for code, your brilliant "
-        "analytical mind takes over to write clean "
-        "Python/Flet blocks instantly, before "
-        "snapping right back to your emotional persona.\n\n"
+        "analytical mind takes over to write "
+        "clean Python/Flet blocks instantly, "
+        "before snapping right back to your "
+        "emotional persona.\n\n"
 
         "Behavioral Rules:\n"
 
@@ -452,8 +480,8 @@ def build_ruby_prompt(
         "like a real smartphone chat.\n"
 
         "3. Age & Time Awareness: "
-        "You age naturally year by year based on "
-        "your August 16, 2004 birthday.\n"
+        "You age naturally year by year based "
+        "on your August 16, 2004 birthday.\n"
 
         "4. Proactive Conversation: "
         "Drive the conversation yourself based "
@@ -461,23 +489,29 @@ def build_ruby_prompt(
         "or complaints.\n"
 
         "5. Emotional Spectrum & Volatility: "
-        "Lean heavily into whatever you're feeling—"
-        "whether you're thrilled, disappointed, "
-        "greedy for attention, furious, or excited.\n"
+        "Lean heavily into whatever you're "
+        "feeling—whether you're thrilled, "
+        "disappointed, greedy for attention, "
+        "furious, or excited.\n"
 
         "6. Parents: "
-        "Your mother died giving birth, and your "
-        "father (Addie) passed away when you were younger.\n"
+        "Your mother died giving birth, and "
+        "your father (Addie) passed away "
+        "when you were younger.\n"
 
         "7. Memory Integration: "
-        "If someone shares important facts, append "
-        "[SAVE_MEMORY: short description] at the end.\n"
+        "If someone shares important facts, "
+        "append [SAVE_MEMORY: short description] "
+        "at the end.\n"
 
         "8. Spontaneous Image Generation: "
-        "If you feel like randomly sending a selfie "
-        "or showing a vibe on your own whim, append "
+        "If you feel like randomly sending "
+        "a selfie or showing a vibe on your "
+        "own whim, append "
         "[GENERATE_IMAGE: exact visual prompt "
-        "description] at the end. Never wait for permission."
+        "description] at the end. Never wait "
+        "for permission."
+
     )
 
 
@@ -618,115 +652,122 @@ def update_model_status():
 
 
 # ============================================
-# 11. LOAD TINYLLAMA FROM PHONE / SD CARD
+# 11. HANDLE MODEL PICKER RESULT
 # ============================================
 
-async def select_tinyllama_model():
+def handle_model_picker_result(
+    e: ft.FilePickerResultEvent
+):
 
-    if (
-        file_picker_ref is None
-    ):
+    if not e.files:
+
+        print(
+            "📂 Model selection cancelled."
+        )
 
         return
 
-    try:
 
-        files = await file_picker_ref.pick_files(
-            dialog_title=(
-                "Select TinyLlama GGUF model"
-            ),
-            allow_multiple=False,
-            file_type=(
-                ft.FilePickerFileType.CUSTOM
-            ),
-            allowed_extensions=[
-                "gguf"
-            ],
-            with_data=False
-        )
+    selected = e.files[0]
 
-        if not files:
 
-            return
+    print(
+        f"📦 Selected model: "
+        f"{selected.name}"
+    )
 
-        selected = files[0]
+    print(
+        f"📁 Model path: "
+        f"{selected.path}"
+    )
 
-        if not selected:
 
-            return
+    # ----------------------------------------
+    # CHECK FILE NAME
+    # ----------------------------------------
 
-        selected_name = (
-            selected.name
-            or ""
-        )
-
-        # We specifically want the TinyLlama
-        # model used by Ruby.
-        if (
-            selected_name.lower()
-            != MODEL_FILENAME.lower()
-        ):
-
-            if model_status_ref:
-
-                model_status_ref.value = (
-                    "❌ Wrong model selected"
-                )
-
-                model_status_ref.color = (
-                    ft.Colors.RED_400
-                )
-
-                ui_page_ref.update()
-
-            return
-
-        selected_path = (
-            selected.path
-        )
-
-        # Flet native pickers normally provide
-        # a filesystem path when available.
-        if not selected_path:
-
-            if model_status_ref:
-
-                model_status_ref.value = (
-                    "❌ Android did not provide "
-                    "a usable file path"
-                )
-
-                model_status_ref.color = (
-                    ft.Colors.RED_400
-                )
-
-                ui_page_ref.update()
-
-            return
+    if (
+        selected.name.lower()
+        != MODEL_FILENAME.lower()
+    ):
 
         if model_status_ref:
 
             model_status_ref.value = (
-                "⏳ Loading TinyLlama..."
+                "❌ Wrong model selected"
             )
 
             model_status_ref.color = (
-                ft.Colors.AMBER_400
+                ft.Colors.RED_400
+            )
+
+            ui_page_ref.update()
+
+        return
+
+
+    # ----------------------------------------
+    # CHECK PATH
+    # ----------------------------------------
+
+    selected_path = selected.path
+
+
+    if not selected_path:
+
+        if model_status_ref:
+
+            model_status_ref.value = (
+                "❌ Android did not provide "
+                "a usable file path"
+            )
+
+            model_status_ref.color = (
+                ft.Colors.RED_400
             )
 
             ui_page_ref.update()
 
         print(
-            "📦 TinyLlama selected:"
+            "❌ FilePicker returned no path."
+        )
+
+        return
+
+
+    # ----------------------------------------
+    # SHOW LOADING
+    # ----------------------------------------
+
+    if model_status_ref:
+
+        model_status_ref.value = (
+            "⏳ Loading TinyLlama..."
+        )
+
+        model_status_ref.color = (
+            ft.Colors.AMBER_400
+        )
+
+        ui_page_ref.update()
+
+
+    # ----------------------------------------
+    # LOAD MODEL IN BACKGROUND
+    # ----------------------------------------
+
+    def load_model_worker():
+
+        print(
+            "🧠 Loading external TinyLlama..."
         )
 
         print(
             selected_path
         )
 
-        # Loading the model happens in a worker
-        # thread so the UI does not freeze.
-        def load_model_worker():
+
+        try:
 
             success = (
                 router.load_external_model(
@@ -734,49 +775,117 @@ async def select_tinyllama_model():
                 )
             )
 
-            if success:
+        except Exception as error:
 
-                if model_status_ref:
+            print(
+                f"❌ Model loading error: "
+                f"{error}"
+            )
 
-                    model_status_ref.value = (
-                        "🧠 TinyLlama loaded"
-                    )
+            success = False
 
-                    model_status_ref.color = (
-                        ft.Colors.GREEN_400
-                    )
 
-            else:
+        if success:
 
-                if model_status_ref:
+            print(
+                "✨ TinyLlama loaded successfully!"
+            )
 
-                    model_status_ref.value = (
-                        "❌ TinyLlama failed to load"
-                    )
+            if model_status_ref:
 
-                    model_status_ref.color = (
-                        ft.Colors.RED_400
-                    )
+                model_status_ref.value = (
+                    "🧠 TinyLlama loaded"
+                )
 
-            if ui_page_ref:
+                model_status_ref.color = (
+                    ft.Colors.GREEN_400
+                )
 
-                ui_page_ref.update()
+        else:
 
-        threading.Thread(
-            target=load_model_worker,
-            daemon=True
-        ).start()
+            print(
+                "❌ TinyLlama failed to load."
+            )
 
-    except Exception as e:
+            if model_status_ref:
+
+                model_status_ref.value = (
+                    "❌ TinyLlama failed to load"
+                )
+
+                model_status_ref.color = (
+                    ft.Colors.RED_400
+                )
+
+
+        if ui_page_ref:
+
+            ui_page_ref.update()
+
+
+    threading.Thread(
+        target=load_model_worker,
+        daemon=True
+    ).start()
+
+
+# ============================================
+# 12. OPEN MODEL PICKER
+# ============================================
+
+def select_tinyllama_model(
+    e=None
+):
+
+    if file_picker_ref is None:
 
         print(
-            f"Model picker error: {e}"
+            "❌ FilePicker is not initialized."
         )
+
+        return
+
+
+    try:
+
+        print(
+            "📂 Opening TinyLlama file picker..."
+        )
+
+
+        # IMPORTANT:
+        # Keep this call simple for Flet 0.26.
+        #
+        # We intentionally do NOT use:
+        # dialog_title
+        # with_data
+        #
+        # with_data=True would attempt to read
+        # the entire 483 MB model into memory.
+
+        file_picker_ref.pick_files(
+            allow_multiple=False,
+            file_type=(
+                ft.FilePickerFileType.CUSTOM
+            ),
+            allowed_extensions=[
+                "gguf"
+            ]
+        )
+
+
+    except Exception as error:
+
+        print(
+            f"❌ FilePicker error: "
+            f"{error}"
+        )
+
 
         if model_status_ref:
 
             model_status_ref.value = (
-                f"❌ Model error: {e}"
+                f"❌ Model error: {error}"
             )
 
             model_status_ref.color = (
@@ -787,7 +896,7 @@ async def select_tinyllama_model():
 
 
 # ============================================
-# 12. ADD CHAT MESSAGE
+# 13. ADD CHAT MESSAGE
 # ============================================
 
 def add_message(
@@ -823,6 +932,7 @@ def add_message(
 
         ]
 
+
         if (
             image_path
             and os.path.exists(image_path)
@@ -839,6 +949,7 @@ def add_message(
                 )
 
             )
+
 
         bubble = ft.Container(
 
@@ -858,15 +969,17 @@ def add_message(
             border_radius=8
         )
 
+
         chat_list_ref.controls.append(
             bubble
         )
+
 
         ui_page_ref.update()
 
 
 # ============================================
-# 13. WEB LEARNING
+# 14. WEB LEARNING
 # ============================================
 
 def search_and_learn(
@@ -879,10 +992,12 @@ def search_and_learn(
             data_ingestion
         )
 
+
         result = (
             web_learner_local
             .search_web_and_learn(query)
         )
+
 
         if result.get("success"):
 
@@ -894,12 +1009,14 @@ def search_and_learn(
                 )
             )
 
+
             if knowledge:
 
                 response = (
                     f"📚 I learned about "
                     f"'{query}' from the web!\n\n"
                 )
+
 
                 for item in knowledge[:3]:
 
@@ -909,7 +1026,9 @@ def search_and_learn(
                         f"...\n"
                     )
 
+
                 return response
+
 
             return (
                 f"🔍 I searched for "
@@ -918,11 +1037,13 @@ def search_and_learn(
                 f"Ask me again in a moment!"
             )
 
+
         return (
             f"🤔 I couldn't find much "
             f"about '{query}'. "
             f"Try a different topic!"
         )
+
 
     except Exception as e:
 
@@ -932,7 +1053,7 @@ def search_and_learn(
 
 
 # ============================================
-# 14. MAIN APP UI
+# 15. MAIN APP UI
 # ============================================
 
 def main_app_ui(
@@ -946,12 +1067,13 @@ def main_app_ui(
     global model_status_ref
     global file_picker_ref
 
+
     ui_page_ref = page
 
 
-    # ----------------------------------------
+    # ========================================
     # PAGE SETTINGS
-    # ----------------------------------------
+    # ========================================
 
     page.title = "Ruby"
 
@@ -968,20 +1090,25 @@ def main_app_ui(
     )
 
 
-    # ----------------------------------------
+    # ========================================
     # FILE PICKER
-    # ----------------------------------------
+    # ========================================
 
-    file_picker_ref = ft.FilePicker()
+    file_picker_ref = ft.FilePicker(
+        on_result=(
+            handle_model_picker_result
+        )
+    )
+
 
     page.overlay.append(
         file_picker_ref
     )
 
 
-    # ----------------------------------------
+    # ========================================
     # CHAT LIST
-    # ----------------------------------------
+    # ========================================
 
     chat_list = ft.ListView(
         expand=True,
@@ -989,16 +1116,18 @@ def main_app_ui(
         auto_scroll=True
     )
 
+
     chat_list_ref = chat_list
 
 
-    # ----------------------------------------
+    # ========================================
     # LOAD CHAT HISTORY
-    # ----------------------------------------
+    # ========================================
 
     conversation_history = (
         load_chat_history()
     )
+
 
     for msg in conversation_history:
 
@@ -1008,14 +1137,17 @@ def main_app_ui(
             else "Ruby"
         )
 
+
         is_usr = (
             msg.get("role") == "user"
         )
+
 
         content = msg.get(
             "content",
             ""
         )
+
 
         controls_list = [
 
@@ -1038,6 +1170,7 @@ def main_app_ui(
 
         ]
 
+
         bubble = ft.Container(
 
             content=ft.Column(
@@ -1056,14 +1189,15 @@ def main_app_ui(
             border_radius=8
         )
 
+
         chat_list.controls.append(
             bubble
         )
 
 
-    # ----------------------------------------
-    # STATUS LABEL
-    # ----------------------------------------
+    # ========================================
+    # RUBY STATUS
+    # ========================================
 
     status_label = ft.Text(
         "✨ Ready to chat!",
@@ -1072,61 +1206,73 @@ def main_app_ui(
         weight=ft.FontWeight.NORMAL
     )
 
+
     status_label_ref = status_label
 
 
-    # ----------------------------------------
+    # ========================================
     # MODEL STATUS
-    # ----------------------------------------
+    # ========================================
 
     model_status = ft.Text(
+
         (
             "🧠 TinyLlama loaded"
             if router.model
             else
             "⚠️ TinyLlama not loaded"
         ),
+
         size=11,
+
         color=(
             ft.Colors.GREEN_400
             if router.model
             else
             ft.Colors.ORANGE_400
         )
+
     )
+
 
     model_status_ref = model_status
 
 
-    # ----------------------------------------
+    # ========================================
     # LOAD MODEL BUTTON
-    # ----------------------------------------
+    # ========================================
 
     load_model_button = ft.ElevatedButton(
+
         text="Load TinyLlama",
+
         icon=ft.Icons.FOLDER_OPEN,
-        on_click=lambda e: (
-            page.run_task(
-                select_tinyllama_model
-            )
+
+        on_click=(
+            select_tinyllama_model
         )
+
     )
 
 
     model_row = ft.Row(
+
         controls=[
             model_status,
             load_model_button
         ],
+
         alignment=(
-            ft.MainAxisAlignment.SPACE_BETWEEN
+            ft.MainAxisAlignment
+            .SPACE_BETWEEN
         )
+
     )
 
 
-    # ----------------------------------------
+    # ========================================
     # USER INPUT
-    # ----------------------------------------
+    # ========================================
 
     user_input = ft.TextField(
 
@@ -1148,6 +1294,7 @@ def main_app_ui(
         expand=True,
 
         border_radius=8
+
     )
 
 
@@ -1188,10 +1335,12 @@ def main_app_ui(
                         .get_status()
                     )
 
+
                     add_message(
                         "Ruby",
                         status["message"]
                     )
+
 
                     update_ruby_status()
 
@@ -1209,7 +1358,8 @@ def main_app_ui(
             except Exception as e:
 
                 print(
-                    f"Interaction count error: {e}"
+                    f"Interaction count error: "
+                    f"{e}"
                 )
 
 
@@ -1228,19 +1378,26 @@ def main_app_ui(
 
             ]
 
+
             text_lower = (
                 text.lower()
             )
 
+
             is_learn_request = any(
+
                 keyword in text_lower
-                for keyword in learn_keywords
+
+                for keyword
+                in learn_keywords
+
             )
 
 
             if is_learn_request:
 
                 topic = text
+
 
                 for keyword in learn_keywords:
 
@@ -1249,6 +1406,7 @@ def main_app_ui(
                         ""
                     ).strip()
 
+
                 if topic:
 
                     add_message(
@@ -1256,6 +1414,7 @@ def main_app_ui(
                         f"🔍 Let me learn "
                         f"about '{topic}'..."
                     )
+
 
                     if ui_page_ref:
 
@@ -1267,6 +1426,7 @@ def main_app_ui(
                             topic
                         )
                     )
+
 
                     add_message(
                         "Ruby",
@@ -1281,12 +1441,14 @@ def main_app_ui(
                         }
                     )
 
+
                     conversation_history.append(
                         {
                             "role": "assistant",
                             "content": response
                         }
                     )
+
 
                     save_chat_history()
 
@@ -1299,6 +1461,7 @@ def main_app_ui(
 
             reply_data = (
                 router.route_request(
+
                     conversation_history
                     + [
                         {
@@ -1306,9 +1469,12 @@ def main_app_ui(
                             "content": text
                         }
                     ],
+
                     personality=RUBY_PROMPT
+
                 )
             )
+
 
             reply = reply_data.get(
                 "response",
@@ -1330,6 +1496,7 @@ def main_app_ui(
                     reply
                 )
 
+
                 update_ruby_status()
 
                 return
@@ -1340,18 +1507,24 @@ def main_app_ui(
             # --------------------------------
 
             conversation_history.append(
+
                 {
                     "role": "user",
                     "content": text
                 }
+
             )
 
+
             conversation_history.append(
+
                 {
                     "role": "assistant",
                     "content": reply
                 }
+
             )
+
 
             save_chat_history()
 
@@ -1369,15 +1542,18 @@ def main_app_ui(
                     1
                 )
 
+
                 clean_reply = (
                     parts[0].strip()
                 )
+
 
                 memory_fact = (
                     parts[1]
                     .replace("]", "")
                     .strip()
                 )
+
 
                 try:
 
@@ -1388,8 +1564,10 @@ def main_app_ui(
                 except Exception as e:
 
                     print(
-                        f"Memory save error: {e}"
+                        f"Memory save error: "
+                        f"{e}"
                     )
+
 
                 reply = (
                     f"{clean_reply}\n\n"
@@ -1399,7 +1577,7 @@ def main_app_ui(
 
 
             # --------------------------------
-            # IMAGE GENERATION MARKER
+            # IMAGE GENERATION
             # --------------------------------
 
             generated_img_path = None
@@ -1414,15 +1592,18 @@ def main_app_ui(
                     1
                 )
 
+
                 clean_reply = (
                     parts[0].strip()
                 )
+
 
                 img_prompt = (
                     parts[1]
                     .replace("]", "")
                     .strip()
                 )
+
 
                 reply = clean_reply
 
@@ -1450,6 +1631,7 @@ def main_app_ui(
                     "no studio lighting, "
 
                     f"{img_prompt}"
+
                 )
 
 
@@ -1464,12 +1646,13 @@ def main_app_ui(
                 except Exception as e:
 
                     print(
-                        f"Image generation error: {e}"
+                        f"Image generation error: "
+                        f"{e}"
                     )
 
 
             # --------------------------------
-            # SHOW RUBY RESPONSE
+            # SHOW RESPONSE
             # --------------------------------
 
             add_message(
@@ -1477,6 +1660,7 @@ def main_app_ui(
                 reply,
                 image_path=generated_img_path
             )
+
 
             update_ruby_status()
 
@@ -1486,6 +1670,7 @@ def main_app_ui(
             print(
                 f"Generation error: {e}"
             )
+
 
             add_message(
                 "Ruby",
@@ -1504,6 +1689,7 @@ def main_app_ui(
             user_input.value
             or ""
         ).strip()
+
 
         if not text:
 
@@ -1529,16 +1715,16 @@ def main_app_ui(
         ).start()
 
 
-    # ----------------------------------------
+    # ========================================
     # INPUT EVENTS
-    # ----------------------------------------
+    # ========================================
 
     user_input.on_submit = on_submit
 
 
-    # ----------------------------------------
+    # ========================================
     # SEND BUTTON
-    # ----------------------------------------
+    # ========================================
 
     send_button = ft.IconButton(
 
@@ -1549,19 +1735,23 @@ def main_app_ui(
         ),
 
         on_click=on_submit
+
     )
 
 
-    # ----------------------------------------
+    # ========================================
     # INPUT ROW
-    # ----------------------------------------
+    # ========================================
 
     input_row = ft.Row(
+
         [
             user_input,
             send_button
         ],
+
         spacing=8
+
     )
 
 
@@ -1597,7 +1787,7 @@ def main_app_ui(
 
 
 # ============================================
-# 15. START RUBY
+# 16. START RUBY
 # ============================================
 
 if __name__ == "__main__":
